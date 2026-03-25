@@ -154,6 +154,7 @@ name = "screeps-rust"
 version = "0.1.0"
 dependencies = [
  "screeps-game-api",
+ "serde",
  "serde-wasm-bindgen",
  "wasm-bindgen",
 ]
