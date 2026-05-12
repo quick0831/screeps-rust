@@ -1,3 +1,5 @@
+use wasm_bindgen::prelude::*;
+
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
 
@@ -6,6 +8,10 @@ use screeps::Part;
 use screeps::SpawnOptions;
 use screeps::StructureSpawn;
 use screeps::game;
+
+mod logging;
+
+static INIT_LOGGING: std::sync::Once = std::sync::Once::new();
 
 mod harvester;
 mod upgrader;
@@ -26,8 +32,13 @@ struct SharedData {
     spawn: StructureSpawn,
 }
 
-#[unsafe(export_name = "loop")]
-pub extern "C" fn func_loop() {
+#[wasm_bindgen(js_name = loop)]
+pub fn game_loop() {
+    INIT_LOGGING.call_once(|| {
+        // show all output of Info level, adjust as needed
+        logging::setup_logging(logging::Info);
+    });
+
     let time = game::time();
 
     let creeps = game::creeps();
