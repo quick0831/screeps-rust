@@ -5,9 +5,11 @@ use js_sys::Object;
 use js_sys::Reflect;
 use log::info;
 use log::warn;
+use screeps::StructureTower;
 use screeps::StructureType;
 use screeps::TextAlign;
 use screeps::TextStyle;
+use screeps::find;
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
 use strum::EnumDiscriminants;
@@ -31,6 +33,7 @@ static INIT_LOGGING: std::sync::Once = std::sync::Once::new();
 
 mod builder;
 mod harvester;
+mod tower;
 mod upgrader;
 
 #[derive(Debug, Serialize, Deserialize, EnumDiscriminants)]
@@ -98,6 +101,15 @@ pub fn game_loop() {
         spawn: game::spawns().values().next().unwrap(),
         room: game::rooms().values().next().unwrap(),
     };
+
+    let towers = d
+        .room
+        .find(find::MY_STRUCTURES, None)
+        .into_iter()
+        .filter_map(|s| -> Option<StructureTower> { s.try_into().ok() });
+    for tower in towers {
+        tower::run(tower);
+    }
 
     for creep in creeps.values() {
         let Ok(mut memory) = from_value::<CreepMemory>(creep.memory()) else {
