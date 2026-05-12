@@ -8,6 +8,6 @@ pub struct BuilderMemory {
     building: bool,
 }
 
-pub fn run(_creep: &Creep, _memory: &BuilderMemory, _d: &SharedData) {
+pub fn run(_creep: &Creep, _memory: &mut BuilderMemory, _d: &SharedData) {
     // todo
 }

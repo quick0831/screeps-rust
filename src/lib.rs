@@ -51,14 +51,16 @@ pub fn game_loop() {
     };
 
     for creep in creeps.values() {
-        let Ok(memory) = from_value::<CreepMemory>(creep.memory()) else {
+        let Ok(mut memory) = from_value::<CreepMemory>(creep.memory()) else {
             continue;
         };
-        match &memory {
+        match &mut memory {
             CreepMemory::Harvester(memory) => harvester::run(&creep, memory, &d),
             CreepMemory::Upgrader(memory) => upgrader::run(&creep, memory, &d),
             CreepMemory::Builder(memory) => builder::run(&creep, memory, &d),
         }
+
+        creep.set_memory(&to_value(&memory).expect("Failed to serialize memory"));
     }
 
     let roles: Vec<CreepRole> = creeps

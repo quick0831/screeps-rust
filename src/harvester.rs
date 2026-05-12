@@ -10,7 +10,7 @@ use crate::SharedData;
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct HarvesterMemory {}
 
-pub fn run(creep: &Creep, _memory: &HarvesterMemory, d: &SharedData) {
+pub fn run(creep: &Creep, _memory: &mut HarvesterMemory, d: &SharedData) {
     if creep.store().get_free_capacity(None) > 0 {
         let sources = creep.room().unwrap().find(find::SOURCES, None);
         if let Err(HarvestErrorCode::NotInRange) = creep.harvest(&sources[0]) {
