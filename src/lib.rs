@@ -1,5 +1,6 @@
 use log::info;
 use log::warn;
+use screeps::StructureType;
 use screeps::TextAlign;
 use screeps::TextStyle;
 use serde::{Deserialize, Serialize};
@@ -129,6 +130,19 @@ pub fn game_loop() {
     visual.text(0., 3., text, Some(style.clone()));
     let text = format!("Builders: {num_builders}");
     visual.text(0., 4., text, Some(style.clone()));
+
+    let pos = d.spawn.pos();
+    let x = pos.x().u8();
+    let y = pos.y().u8();
+    for i in (x - 2)..=(x + 2) {
+        for j in (y - 2)..=(y + 2) {
+            if (i + j + x + y).is_multiple_of(2) {
+                let _ = d
+                    .room
+                    .create_construction_site(i, j, StructureType::Road, None);
+            }
+        }
+    }
 
     let cpu_limit = game::cpu::limit();
     let cpu_usage = game::cpu::get_used();
