@@ -187,12 +187,15 @@ pub fn game_loop() {
     let pos = d.spawn.pos();
     let x = pos.x().u8();
     let y = pos.y().u8();
-    for i in (x - 2)..=(x + 2) {
-        for j in (y - 2)..=(y + 2) {
-            if (i + j + x + y).is_multiple_of(2) {
-                let _ = d
-                    .room
-                    .create_construction_site(i, j, StructureType::Road, None);
+    for i in (x - 3)..=(x + 3) {
+        for j in (y - 3)..=(y + 3) {
+            let ty = if (i + j + x + y).is_multiple_of(2) {
+                StructureType::Road
+            } else {
+                StructureType::Extension
+            };
+            if i.abs_diff(x) + j.abs_diff(y) > 1 {
+                let _ = d.room.create_construction_site(i, j, ty, None);
             }
         }
     }
