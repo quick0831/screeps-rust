@@ -1,12 +1,16 @@
 use log::info;
 use log::warn;
+use screeps::TextAlign;
+use screeps::TextStyle;
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
 use strum::EnumDiscriminants;
 use strum::IntoDiscriminant;
 use wasm_bindgen::prelude::*;
 
+use screeps::HasPosition;
 use screeps::Part;
+use screeps::Room;
 use screeps::SpawnOptions;
 use screeps::StructureSpawn;
 use screeps::game;
@@ -26,6 +30,7 @@ mod upgrader;
 #[derive(Debug, Serialize, Deserialize, EnumDiscriminants)]
 #[serde(rename_all = "snake_case", tag = "role")]
 #[strum_discriminants(name(CreepRole))]
+#[strum_discriminants(derive(strum::Display))]
 enum CreepMemory {
     Harvester(HarvesterMemory),
     Upgrader(UpgraderMemory),
@@ -34,6 +39,7 @@ enum CreepMemory {
 
 struct SharedData {
     spawn: StructureSpawn,
+    room: Room,
 }
 
 #[wasm_bindgen(js_name = loop)]
@@ -48,6 +54,7 @@ pub fn game_loop() {
     let creeps = game::creeps();
     let d = SharedData {
         spawn: game::spawns().values().next().unwrap(),
+        room: game::rooms().values().next().unwrap(),
     };
 
     for creep in creeps.values() {
@@ -72,23 +79,56 @@ pub fn game_loop() {
         })
         .collect();
 
-    if d.spawn.spawning().is_some() {
-        // stop yapping
-    } else if roles.iter().filter(|c| **c == CreepRole::Harvester).count() < 2 {
+    let num_roles = |role| roles.iter().filter(|c| **c == role).count();
+    let num_harvesters = num_roles(CreepRole::Harvester);
+    let num_upgraders = num_roles(CreepRole::Upgrader);
+    let num_builders = num_roles(CreepRole::Builder);
+
+    if let Some(spawning) = d.spawn.spawning() {
+        if let Some(name) = spawning.name().as_string()
+            && let Some(creep) = game::creeps().get(name)
+            && let Ok(memory) = from_value::<CreepMemory>(creep.memory())
+        {
+            let role = memory.discriminant();
+            let pos = d.spawn.pos();
+            let text = format!("Spawning: {role}");
+            let style = TextStyle::default().align(TextAlign::Left);
+            let visual = d.room.visual();
+            visual.text(pos.x().u8() as f32, pos.y().u8() as f32, text, Some(style));
+        }
+    } else if num_harvesters < 2 {
         let body = vec![Part::Move, Part::Work, Part::Carry];
         let name = format!("Harvester{time}");
         let mem = CreepMemory::Harvester(HarvesterMemory::default());
         let option = SpawnOptions::new().memory(to_value(&mem).unwrap());
         let _ = d.spawn.spawn_creep_with_options(&body, &name, &option);
         info!("Spawning: {name}");
-    } else if roles.iter().filter(|c| **c == CreepRole::Upgrader).count() < 2 {
+    } else if num_upgraders < 3 {
         let body = vec![Part::Move, Part::Work, Part::Carry];
         let name = format!("Upgrader{time}");
         let mem = CreepMemory::Upgrader(UpgraderMemory::default());
         let option = SpawnOptions::new().memory(to_value(&mem).unwrap());
         let _ = d.spawn.spawn_creep_with_options(&body, &name, &option);
         info!("Spawning: {name}");
+    } else if num_builders < 2 {
+        let body = vec![Part::Move, Part::Work, Part::Carry];
+        let name = format!("Builder{time}");
+        let mem = CreepMemory::Builder(BuilderMemory::default());
+        let option = SpawnOptions::new().memory(to_value(&mem).unwrap());
+        let _ = d.spawn.spawn_creep_with_options(&body, &name, &option);
+        info!("Spawning: {name}");
     }
+
+    let style = TextStyle::default().align(TextAlign::Left);
+    let visual = d.room.visual();
+    let text = format!("Time: {time}");
+    visual.text(0., 1., text, Some(style.clone()));
+    let text = format!("Harvesters: {num_harvesters}");
+    visual.text(0., 2., text, Some(style.clone()));
+    let text = format!("Upgraders: {num_upgraders}");
+    visual.text(0., 3., text, Some(style.clone()));
+    let text = format!("Builders: {num_builders}");
+    visual.text(0., 4., text, Some(style.clone()));
 
     let cpu_limit = game::cpu::limit();
     let cpu_usage = game::cpu::get_used();
