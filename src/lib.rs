@@ -48,6 +48,12 @@ struct SharedData {
     room: Room,
 }
 
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(thread_local_v2, js_name = Memory)]
+    static MEMORY: Object;
+}
+
 #[wasm_bindgen(js_name = loop)]
 pub fn game_loop() {
     INIT_LOGGING.call_once(|| {
@@ -68,21 +74,23 @@ pub fn game_loop() {
         }
 
         // grab `Memory.creeps` (if it exists)
-        if let Ok(memory_creeps) = Reflect::get(&screeps::memory::ROOT, &JsString::from("creeps")) {
-            // convert from JsValue to Object
-            let memory_creeps: Object = memory_creeps.unchecked_into();
-            // iterate memory creeps
-            for creep_name_js in Object::keys(&memory_creeps).iter() {
-                // convert to String (after converting to JsString)
-                let creep_name = String::from(creep_name_js.dyn_ref::<JsString>().unwrap());
+        MEMORY.with(|memory| {
+            if let Ok(memory_creeps) = Reflect::get(memory, &JsString::from("creeps")) {
+                // convert from JsValue to Object
+                let memory_creeps: Object = memory_creeps.unchecked_into();
+                // iterate memory creeps
+                for creep_name_js in Object::keys(&memory_creeps).iter() {
+                    // convert to String (after converting to JsString)
+                    let creep_name = String::from(creep_name_js.dyn_ref::<JsString>().unwrap());
 
-                // check the HashSet for the creep name, deleting if not alive
-                if !alive_creeps.contains(&creep_name) {
-                    info!("deleting memory for dead creep {}", creep_name);
-                    let _ = Reflect::delete_property(&memory_creeps, &creep_name_js);
+                    // check the HashSet for the creep name, deleting if not alive
+                    if !alive_creeps.contains(&creep_name) {
+                        info!("deleting memory for dead creep {}", creep_name);
+                        let _ = Reflect::delete_property(&memory_creeps, &creep_name_js);
+                    }
                 }
             }
-        }
+        });
     }
 
     let creeps = game::creeps();
