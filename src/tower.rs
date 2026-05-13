@@ -1,5 +1,6 @@
 use screeps::HasPosition;
 use screeps::StructureTower;
+use screeps::StructureType;
 use screeps::find;
 
 pub fn run(tower: StructureTower) {
@@ -9,7 +10,10 @@ pub fn run(tower: StructureTower) {
         .find(find::STRUCTURES, None)
         .into_iter()
         .filter(|s| {
-            if let Some(repairable) = s.as_repairable() {
+            if s.structure_type() == StructureType::Wall {
+                // avoid fixing nearby walls (too hard to fill 300M hp)
+                false
+            } else if let Some(repairable) = s.as_repairable() {
                 (repairable.hits() as f32 / repairable.hits_max() as f32) < 0.8
             } else {
                 false
