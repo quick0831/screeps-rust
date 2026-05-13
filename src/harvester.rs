@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use crate::SharedData;
 
 #[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
 pub struct HarvesterMemory {}
 
 pub fn run(creep: &Creep, _memory: &mut HarvesterMemory, _d: &SharedData) {
@@ -33,7 +34,7 @@ pub fn run(creep: &Creep, _memory: &mut HarvesterMemory, _d: &SharedData) {
         if let Some(target) = targets.next()
             && let Some(transferable) = target.as_transferable()
         {
-            let err = creep.transfer(transferable, screeps::ResourceType::Energy, None);
+            let err = creep.transfer(transferable, ResourceType::Energy, None);
             if let Err(TransferErrorCode::NotInRange) = err {
                 let _ = creep.move_to(target.clone());
             }

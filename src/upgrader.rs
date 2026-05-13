@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use crate::SharedData;
 
 #[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
 pub struct UpgraderMemory {
     upgrading: bool,
 }
