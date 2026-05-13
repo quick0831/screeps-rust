@@ -151,21 +151,21 @@ pub fn game_loop() {
             visual.text(pos.x().u8() as f32, pos.y().u8() as f32, text, Some(style));
         }
     } else if num_harvesters < 2 {
-        let body = vec![Part::Move, Part::Work, Part::Carry];
+        let body = vec![Part::Move, Part::Move, Part::Work, Part::Carry];
         let name = format!("Harvester{time}");
         let mem = CreepMemory::Harvester(HarvesterMemory::default());
         let option = SpawnOptions::new().memory(to_value(&mem).unwrap());
         let _ = d.spawn.spawn_creep_with_options(&body, &name, &option);
         info!("Spawning: {name}");
     } else if num_upgraders < 3 {
-        let body = vec![Part::Move, Part::Work, Part::Carry];
+        let body = vec![Part::Move, Part::Move, Part::Work, Part::Carry];
         let name = format!("Upgrader{time}");
         let mem = CreepMemory::Upgrader(UpgraderMemory::default());
         let option = SpawnOptions::new().memory(to_value(&mem).unwrap());
         let _ = d.spawn.spawn_creep_with_options(&body, &name, &option);
         info!("Spawning: {name}");
     } else if num_builders < 2 {
-        let body = vec![Part::Move, Part::Work, Part::Carry];
+        let body = vec![Part::Move, Part::Move, Part::Work, Part::Carry];
         let name = format!("Builder{time}");
         let mem = CreepMemory::Builder(BuilderMemory::default());
         let option = SpawnOptions::new().memory(to_value(&mem).unwrap());
