@@ -145,7 +145,7 @@ pub fn game_loop() {
         {
             let role = memory.discriminant();
             let pos = d.spawn.pos();
-            let text = format!("Spawning: {role}");
+            let text = format!("🛠️ {role}");
             let style = TextStyle::default().align(TextAlign::Left);
             let visual = d.room.visual();
             visual.text(pos.x().u8() as f32, pos.y().u8() as f32, text, Some(style));
