@@ -1,11 +1,15 @@
-use screeps::{
-    Creep, HasPosition, ResourceType, SharedCreepProperties, StructureType,
-    action_error_codes::{BuildErrorCode, WithdrawErrorCode},
-    find,
-};
+use screeps::Creep;
+use screeps::HasPosition;
+use screeps::ResourceType;
+use screeps::SharedCreepProperties;
+use screeps::StructureType;
+use screeps::action_error_codes::BuildErrorCode;
+use screeps::action_error_codes::WithdrawErrorCode;
+use screeps::find;
 use serde::{Deserialize, Serialize};
 
-use crate::{SharedData, utils::sort_unstable_by_distance};
+use crate::SharedData;
+use crate::utils::sort_unstable_by_distance;
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
