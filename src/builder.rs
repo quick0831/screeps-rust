@@ -1,6 +1,6 @@
 use screeps::{
     Creep, ResourceType, SharedCreepProperties, StructureType,
-    action_error_codes::{BuildErrorCode, HarvestErrorCode, WithdrawErrorCode},
+    action_error_codes::{BuildErrorCode, WithdrawErrorCode},
     find,
 };
 use serde::{Deserialize, Serialize};
@@ -11,20 +11,16 @@ use crate::SharedData;
 #[serde(default)]
 pub struct BuilderMemory {
     building: bool,
-    harvest: bool,
+    fetch: bool,
 }
 
 pub fn run(creep: &Creep, memory: &mut BuilderMemory, d: &SharedData) {
-    if memory.building && creep.store().get(ResourceType::Energy).unwrap_or(0) == 0 {
+    if creep.store().get(ResourceType::Energy).unwrap_or(0) == 0 {
         memory.building = false;
         let energy_avail = d.room.energy_available();
         let energy_cap = d.room.energy_capacity_available();
-        memory.harvest = energy_avail < 500 || energy_cap - energy_avail > 200;
-        let msg = if memory.harvest {
-            "🔄 harvest"
-        } else {
-            "🫳 grab energy"
-        };
+        memory.fetch = energy_avail >= 500 && energy_cap - energy_avail < 200;
+        let msg = if memory.fetch { "🫳 fetch" } else { "⏸️" };
         let _ = creep.say(msg, false);
     }
     if !memory.building && creep.store().get_free_capacity(None) == 0 {
@@ -39,12 +35,7 @@ pub fn run(creep: &Creep, memory: &mut BuilderMemory, d: &SharedData) {
         {
             let _ = creep.move_to(construction_site);
         }
-    } else if memory.harvest {
-        let sources = creep.room().unwrap().find(find::SOURCES, None);
-        if let Err(HarvestErrorCode::NotInRange) = creep.harvest(&sources[0]) {
-            let _ = creep.move_to(&sources[0]);
-        }
-    } else {
+    } else if memory.fetch {
         // grab energy from spawn and extensions
         let structures = creep.room().unwrap().find(find::MY_STRUCTURES, None);
         let mut targets = structures.into_iter().filter(|s| {

@@ -150,7 +150,7 @@ pub fn game_loop() {
             let visual = d.room.visual();
             visual.text(pos.x().u8() as f32, pos.y().u8() as f32, text, Some(style));
         }
-    } else if num_harvesters < 2 {
+    } else if num_harvesters < 4 {
         let body = vec![Part::Move, Part::Move, Part::Work, Part::Carry];
         let name = format!("Harvester{time}");
         let mem = CreepMemory::Harvester(HarvesterMemory::default());
