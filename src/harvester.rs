@@ -27,7 +27,7 @@ pub fn run(creep: &Creep, _memory: &mut HarvesterMemory, _d: &SharedData) {
                 StructureType::Extension | StructureType::Spawn | StructureType::Tower
             ) && s
                 .as_has_store()
-                .map(|s| s.store().get_free_capacity(Some(ResourceType::Energy)))
+                .and_then(|s| s.store().get(ResourceType::Energy))
                 .unwrap_or(0)
                 > 0
         });
