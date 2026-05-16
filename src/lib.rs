@@ -139,6 +139,8 @@ pub fn game_loop() {
     let num_upgraders = num_roles(CreepRole::Upgrader);
     let num_builders = num_roles(CreepRole::Builder);
 
+    let has_construction_sites = !d.room.find(find::CONSTRUCTION_SITES, None).is_empty();
+
     if let Some(spawning) = d.spawn.spawning() {
         if let Some(name) = spawning.name().as_string()
             && let Some(creep) = game::creeps().get(name)
@@ -165,7 +167,7 @@ pub fn game_loop() {
         let option = SpawnOptions::new().memory(to_value(&mem).unwrap());
         let _ = d.spawn.spawn_creep_with_options(&body, &name, &option);
         info!("Spawning: {name}");
-    } else if num_builders < 2 {
+    } else if num_builders < 2 && has_construction_sites {
         let body = vec![Part::Move, Part::Move, Part::Work, Part::Carry];
         let name = format!("Builder{time}");
         let mem = CreepMemory::Builder(BuilderMemory::default());
