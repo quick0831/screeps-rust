@@ -28,6 +28,7 @@ use crate::harvester::HarvesterMemory;
 use crate::upgrader::UpgraderMemory;
 
 mod logging;
+mod utils;
 
 static INIT_LOGGING: std::sync::Once = std::sync::Once::new();
 

@@ -1,11 +1,11 @@
 use screeps::{
-    Creep, ResourceType, SharedCreepProperties, StructureType,
+    Creep, HasPosition, ResourceType, SharedCreepProperties, StructureType,
     action_error_codes::{BuildErrorCode, WithdrawErrorCode},
     find,
 };
 use serde::{Deserialize, Serialize};
 
-use crate::SharedData;
+use crate::{SharedData, utils::sort_unstable_by_distance};
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
@@ -30,6 +30,7 @@ pub fn run(creep: &Creep, memory: &mut BuilderMemory, d: &SharedData) {
 
     if memory.building {
         let construction_sites = creep.room().unwrap().find(find::CONSTRUCTION_SITES, None);
+        let construction_sites = sort_unstable_by_distance(creep.pos(), construction_sites);
         if let Some(construction_site) = construction_sites.first()
             && let Err(BuildErrorCode::NotInRange) = creep.build(construction_site)
         {
@@ -38,17 +39,23 @@ pub fn run(creep: &Creep, memory: &mut BuilderMemory, d: &SharedData) {
     } else if memory.fetch {
         // grab energy from spawn and extensions
         let structures = creep.room().unwrap().find(find::MY_STRUCTURES, None);
-        let mut targets = structures.into_iter().filter(|s| {
-            matches!(
-                s.structure_type(),
-                StructureType::Extension | StructureType::Spawn
-            ) && s
-                .as_has_store()
-                .and_then(|s| s.store().get(ResourceType::Energy))
-                .unwrap_or(0)
-                > 0
-        });
-        if let Some(target) = targets.next()
+        let mut targets = structures
+            .into_iter()
+            .filter(|s| {
+                matches!(
+                    s.structure_type(),
+                    StructureType::Extension | StructureType::Spawn
+                )
+            })
+            .filter(|s| {
+                s.as_has_store()
+                    .and_then(|s| s.store().get(ResourceType::Energy))
+                    .unwrap_or(0)
+                    > 0
+            })
+            .collect::<Vec<_>>();
+        targets = sort_unstable_by_distance(creep.pos(), targets);
+        if let Some(target) = targets.first()
             && let Some(withdrawable) = target.as_withdrawable()
         {
             let err = creep.withdraw(withdrawable, ResourceType::Energy, None);
