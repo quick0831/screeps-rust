@@ -45,8 +45,21 @@ pub fn run(creep: &Creep, memory: &mut HarvesterMemory, d: &SharedData) {
             let _ = creep.move_to(&target);
         }
     } else {
-        let structures = creep.room().unwrap().find(find::MY_STRUCTURES, None);
-        let mut targets = structures
+        let mut containers = d
+            .room
+            .find(find::STRUCTURES, None)
+            .into_iter()
+            .filter(|s| matches!(s.structure_type(), StructureType::Container))
+            .filter(|s| {
+                s.as_has_store()
+                    .map(|s| s.store().get_free_capacity(Some(ResourceType::Energy)))
+                    .unwrap_or(0)
+                    > 0
+            })
+            .collect::<Vec<_>>();
+        let mut targets = d
+            .room
+            .find(find::MY_STRUCTURES, None)
             .into_iter()
             .filter(|s| {
                 matches!(
@@ -61,6 +74,7 @@ pub fn run(creep: &Creep, memory: &mut HarvesterMemory, d: &SharedData) {
                     > 0
             })
             .collect::<Vec<_>>();
+        targets.append(&mut containers);
         targets = sort_unstable_by_distance(creep.pos(), targets);
         if let Some(target) = targets.first()
             && let Some(transferable) = target.as_transferable()

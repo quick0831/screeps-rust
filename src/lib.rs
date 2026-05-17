@@ -30,6 +30,8 @@ mod utils;
 
 use crate::roles::builder::{self, BuilderMemory};
 use crate::roles::harvester::{self, HarvesterMemory};
+use crate::roles::hauler;
+use crate::roles::hauler::HaulerMemory;
 use crate::roles::upgrader::{self, UpgraderMemory};
 use crate::source_alloc::SourceAllocator;
 
@@ -40,6 +42,7 @@ static INIT_LOGGING: std::sync::Once = std::sync::Once::new();
 #[strum_discriminants(name(CreepRole))]
 #[strum_discriminants(derive(strum::Display))]
 enum CreepMemory {
+    Hauler(HaulerMemory),
     Harvester(HarvesterMemory),
     Upgrader(UpgraderMemory),
     Builder(BuilderMemory),
@@ -130,6 +133,7 @@ pub fn game_loop() {
             continue;
         };
         match &mut memory {
+            CreepMemory::Hauler(memory) => hauler::run(&creep, memory, &d),
             CreepMemory::Harvester(memory) => harvester::run(&creep, memory, &d),
             CreepMemory::Upgrader(memory) => upgrader::run(&creep, memory, &d),
             CreepMemory::Builder(memory) => builder::run(&creep, memory, &d),
@@ -148,6 +152,7 @@ pub fn game_loop() {
         .collect();
 
     let num_roles = |role| roles.iter().filter(|c| **c == role).count();
+    let num_haulers = num_roles(CreepRole::Hauler);
     let num_harvesters = num_roles(CreepRole::Harvester);
     let num_upgraders = num_roles(CreepRole::Upgrader);
     let num_builders = num_roles(CreepRole::Builder);
@@ -166,6 +171,13 @@ pub fn game_loop() {
             let visual = d.room.visual();
             visual.text(pos.x().u8() as f32, pos.y().u8() as f32, text, Some(style));
         }
+    } else if num_haulers < 2 && num_haulers < num_harvesters {
+        let body = vec![Part::Move, Part::Move, Part::Carry, Part::Carry];
+        let name = format!("Hauler{time}");
+        let mem = CreepMemory::Hauler(HaulerMemory::default());
+        let option = SpawnOptions::new().memory(to_value(&mem).unwrap());
+        let _ = d.spawn.spawn_creep_with_options(&body, &name, &option);
+        info!("Spawning: {name}");
     } else if harvester_spawn_size != 0 {
         let body = if harvester_spawn_size == 1 || d.room.energy_capacity_available() < 800 {
             vec![Part::Move, Part::Move, Part::Work, Part::Carry]
