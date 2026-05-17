@@ -150,7 +150,20 @@ pub fn game_loop() {
             visual.text(pos.x().u8() as f32, pos.y().u8() as f32, text, Some(style));
         }
     } else if num_harvesters < 4 {
-        let body = vec![Part::Move, Part::Move, Part::Work, Part::Carry];
+        let body = if num_harvesters == 0 || d.room.energy_capacity_available() < 800 {
+            vec![Part::Move, Part::Move, Part::Work, Part::Carry]
+        } else {
+            vec![
+                Part::Move,
+                Part::Move,
+                Part::Move,
+                Part::Move,
+                Part::Work,
+                Part::Work,
+                Part::Carry,
+                Part::Carry,
+            ]
+        };
         let name = format!("Harvester{time}");
         let mem = CreepMemory::Harvester(HarvesterMemory::default());
         let option = SpawnOptions::new().memory(to_value(&mem).unwrap());

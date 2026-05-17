@@ -13,10 +13,19 @@ use crate::utils::sort_unstable_by_distance;
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
-pub struct HarvesterMemory {}
+pub struct HarvesterMemory {
+    harvesting: bool,
+}
 
-pub fn run(creep: &Creep, _memory: &mut HarvesterMemory, _d: &SharedData) {
-    if creep.store().get_free_capacity(None) > 0 {
+pub fn run(creep: &Creep, memory: &mut HarvesterMemory, _d: &SharedData) {
+    if creep.store().get_free_capacity(None) == 0 {
+        memory.harvesting = false;
+    }
+    if creep.store().get(ResourceType::Energy).unwrap_or(0) == 0 {
+        memory.harvesting = true;
+    }
+
+    if memory.harvesting {
         let sources = creep.room().unwrap().find(find::SOURCES, None);
         if let Err(HarvestErrorCode::NotInRange) = creep.harvest(&sources[0]) {
             let _ = creep.move_to(&sources[0]);
