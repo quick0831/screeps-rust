@@ -16,7 +16,7 @@ pub fn run(tower: StructureTower) {
                 // avoid fixing nearby walls (too hard to fill 300M hp)
                 false
             } else if let Some(repairable) = s.as_repairable() {
-                (repairable.hits() as f32 / repairable.hits_max() as f32) < 0.8
+                (repairable.hits() as f32 / repairable.hits_max() as f32) < 0.9
             } else {
                 false
             }
