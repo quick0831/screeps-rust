@@ -1,5 +1,8 @@
+use screeps::ConstructionSite;
 use screeps::Creep;
 use screeps::HasPosition;
+use screeps::MaybeHasId;
+use screeps::ObjectId;
 use screeps::ResourceType;
 use screeps::SharedCreepProperties;
 use screeps::StructureType;
@@ -14,6 +17,7 @@ use crate::utils::sort_unstable_by_distance;
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct BuilderMemory {
+    target: Option<ObjectId<ConstructionSite>>,
     building: bool,
     fetch: bool,
 }
@@ -29,16 +33,22 @@ pub fn run(creep: &Creep, memory: &mut BuilderMemory, d: &SharedData) {
     }
     if !memory.building && creep.store().get_free_capacity(None) == 0 {
         memory.building = true;
+        memory.target = None;
         let _ = creep.say("🚧 build", false);
     }
 
     if memory.building {
-        let construction_sites = creep.room().unwrap().find(find::CONSTRUCTION_SITES, None);
-        let construction_sites = sort_unstable_by_distance(creep.pos(), construction_sites);
-        if let Some(construction_site) = construction_sites.first()
-            && let Err(BuildErrorCode::NotInRange) = creep.build(construction_site)
+        if let Some(target) = memory.target
+            && let Some(target) = target.resolve()
         {
-            let _ = creep.move_to(construction_site);
+            if let Err(BuildErrorCode::NotInRange) = creep.build(&target) {
+                let _ = creep.move_to(target);
+            }
+        } else {
+            let construction_sites = d.room.find(find::MY_CONSTRUCTION_SITES, None);
+            memory.target = sort_unstable_by_distance(creep.pos(), construction_sites)
+                .first()
+                .and_then(|site| site.try_id());
         }
     } else if memory.fetch {
         // grab energy from spawn and extensions
