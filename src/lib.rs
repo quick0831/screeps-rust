@@ -1,3 +1,5 @@
+use std::cmp::max;
+use std::cmp::min;
 use std::collections::HashSet;
 
 use js_sys::JsString;
@@ -179,20 +181,11 @@ pub fn game_loop() {
         let _ = d.spawn.spawn_creep_with_options(&body, &name, &option);
         info!("Spawning: {name}");
     } else if harvester_spawn_size != 0 {
-        let body = if harvester_spawn_size == 1 || d.room.energy_capacity_available() < 800 {
-            vec![Part::Move, Part::Move, Part::Work, Part::Carry]
-        } else {
-            vec![
-                Part::Move,
-                Part::Move,
-                Part::Move,
-                Part::Move,
-                Part::Work,
-                Part::Work,
-                Part::Carry,
-                Part::Carry,
-            ]
-        };
+        let unit_part = [Part::Move, Part::Move, Part::Work, Part::Carry];
+        let unit_cost: u32 = unit_part.map(Part::cost).into_iter().sum();
+        let spawn_cap = (max(300, d.room.energy_capacity_available() - 300) / unit_cost) as u8;
+        let spawn_size = min(harvester_spawn_size, spawn_cap) as usize;
+        let body = unit_part.repeat(spawn_size);
         let name = format!("Harvester{time}");
         let mem = CreepMemory::Harvester(HarvesterMemory::default());
         let option = SpawnOptions::new().memory(to_value(&mem).unwrap());
