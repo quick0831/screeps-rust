@@ -5,7 +5,7 @@ pub fn sort_unstable_by_distance<T: HasPosition>(center: Position, mut sites: Ve
     let (cx, cy) = center.coords_signed();
     sites.sort_unstable_by_key(|s| {
         let (sx, sy) = s.pos().coords_signed();
-        (sx - cx).pow(2) + (sy - cy).pow(2)
+        ((sx - cx) as i16).pow(2) as u16 + ((sy - cy) as i16).pow(2) as u16
     });
     sites
 }
