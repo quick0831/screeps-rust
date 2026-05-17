@@ -22,19 +22,16 @@ use strum::EnumDiscriminants;
 use strum::IntoDiscriminant;
 use wasm_bindgen::prelude::*;
 
-use crate::builder::BuilderMemory;
-use crate::harvester::HarvesterMemory;
-use crate::upgrader::UpgraderMemory;
-
 mod logging;
+mod roles;
+mod tower;
 mod utils;
 
-static INIT_LOGGING: std::sync::Once = std::sync::Once::new();
+use crate::roles::builder::{self, BuilderMemory};
+use crate::roles::harvester::{self, HarvesterMemory};
+use crate::roles::upgrader::{self, UpgraderMemory};
 
-mod builder;
-mod harvester;
-mod tower;
-mod upgrader;
+static INIT_LOGGING: std::sync::Once = std::sync::Once::new();
 
 #[derive(Debug, Serialize, Deserialize, EnumDiscriminants)]
 #[serde(rename_all = "snake_case", tag = "role")]
