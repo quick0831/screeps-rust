@@ -161,6 +161,13 @@ pub fn game_loop() {
 
     let has_construction_sites = !d.room.find(find::CONSTRUCTION_SITES, None).is_empty();
 
+    let spawn_creep = |body: &[Part], name: &str, mem: &CreepMemory| {
+        let option = SpawnOptions::new().memory(to_value(mem).unwrap());
+        let result = d.spawn.spawn_creep_with_options(body, name, &option);
+        info!("Spawning: {name}");
+        result
+    };
+
     if let Some(spawning) = d.spawn.spawning() {
         if let Some(name) = spawning.name().as_string()
             && let Some(creep) = game::creeps().get(name)
@@ -177,9 +184,7 @@ pub fn game_loop() {
         let body = vec![Part::Move, Part::Move, Part::Carry, Part::Carry];
         let name = format!("Hauler{time}");
         let mem = CreepMemory::Hauler(HaulerMemory::default());
-        let option = SpawnOptions::new().memory(to_value(&mem).unwrap());
-        let _ = d.spawn.spawn_creep_with_options(&body, &name, &option);
-        info!("Spawning: {name}");
+        let _ = spawn_creep(&body, &name, &mem);
     } else if harvester_spawn_size != 0 {
         let unit_part = [Part::Move, Part::Move, Part::Work, Part::Carry];
         let unit_cost: u32 = unit_part.map(Part::cost).into_iter().sum();
@@ -188,23 +193,17 @@ pub fn game_loop() {
         let body = unit_part.repeat(spawn_size);
         let name = format!("Harvester{time}");
         let mem = CreepMemory::Harvester(HarvesterMemory::default());
-        let option = SpawnOptions::new().memory(to_value(&mem).unwrap());
-        let _ = d.spawn.spawn_creep_with_options(&body, &name, &option);
-        info!("Spawning: {name}");
+        let _ = spawn_creep(&body, &name, &mem);
     } else if num_upgraders < 3 {
         let body = vec![Part::Move, Part::Move, Part::Work, Part::Carry];
         let name = format!("Upgrader{time}");
         let mem = CreepMemory::Upgrader(UpgraderMemory::default());
-        let option = SpawnOptions::new().memory(to_value(&mem).unwrap());
-        let _ = d.spawn.spawn_creep_with_options(&body, &name, &option);
-        info!("Spawning: {name}");
+        let _ = spawn_creep(&body, &name, &mem);
     } else if num_builders < 2 && has_construction_sites {
         let body = vec![Part::Move, Part::Move, Part::Work, Part::Carry];
         let name = format!("Builder{time}");
         let mem = CreepMemory::Builder(BuilderMemory::default());
-        let option = SpawnOptions::new().memory(to_value(&mem).unwrap());
-        let _ = d.spawn.spawn_creep_with_options(&body, &name, &option);
-        info!("Spawning: {name}");
+        let _ = spawn_creep(&body, &name, &mem);
     }
 
     let style = TextStyle::default().align(TextAlign::Left);
