@@ -210,12 +210,14 @@ pub fn game_loop() {
     let visual = d.room.visual();
     let text = format!("Time: {time}");
     visual.text(0., 1., text, Some(style.clone()));
-    let text = format!("Harvesters: {num_harvesters}");
+    let text = format!("Haulers: {num_haulers}");
     visual.text(0., 2., text, Some(style.clone()));
-    let text = format!("Upgraders: {num_upgraders}");
+    let text = format!("Harvesters: {num_harvesters}");
     visual.text(0., 3., text, Some(style.clone()));
-    let text = format!("Builders: {num_builders}");
+    let text = format!("Upgraders: {num_upgraders}");
     visual.text(0., 4., text, Some(style.clone()));
+    let text = format!("Builders: {num_builders}");
+    visual.text(0., 5., text, Some(style.clone()));
 
     let pos = d.spawn.pos();
     let x = pos.x().u8();
