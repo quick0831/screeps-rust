@@ -1,7 +1,9 @@
 use screeps::Creep;
 use screeps::HasPosition;
+use screeps::ObjectId;
 use screeps::ResourceType;
 use screeps::SharedCreepProperties;
+use screeps::Source;
 use screeps::StructureType;
 use screeps::action_error_codes::HarvestErrorCode;
 use screeps::action_error_codes::TransferErrorCode;
@@ -14,10 +16,23 @@ use crate::utils::sort_unstable_by_distance;
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct HarvesterMemory {
+    target: Option<ObjectId<Source>>,
     harvesting: bool,
 }
 
-pub fn run(creep: &Creep, memory: &mut HarvesterMemory, _d: &SharedData) {
+impl HarvesterMemory {
+    pub fn get_target(&self) -> Option<ObjectId<Source>> {
+        self.target
+    }
+}
+
+pub fn run(creep: &Creep, memory: &mut HarvesterMemory, d: &SharedData) {
+    memory.target = d.source_alloc.delegate(creep).or(memory.target);
+    let Some(target) = memory.target else { return };
+    let Some(target) = target.resolve() else {
+        return;
+    };
+
     if creep.store().get_free_capacity(None) == 0 {
         memory.harvesting = false;
     }
@@ -26,9 +41,8 @@ pub fn run(creep: &Creep, memory: &mut HarvesterMemory, _d: &SharedData) {
     }
 
     if memory.harvesting {
-        let sources = creep.room().unwrap().find(find::SOURCES, None);
-        if let Err(HarvestErrorCode::NotInRange) = creep.harvest(&sources[0]) {
-            let _ = creep.move_to(&sources[0]);
+        if let Err(HarvestErrorCode::NotInRange) = creep.harvest(&target) {
+            let _ = creep.move_to(&target);
         }
     } else {
         let structures = creep.room().unwrap().find(find::MY_STRUCTURES, None);

@@ -24,12 +24,14 @@ use wasm_bindgen::prelude::*;
 
 mod logging;
 mod roles;
+mod source_alloc;
 mod tower;
 mod utils;
 
 use crate::roles::builder::{self, BuilderMemory};
 use crate::roles::harvester::{self, HarvesterMemory};
 use crate::roles::upgrader::{self, UpgraderMemory};
+use crate::source_alloc::SourceAllocator;
 
 static INIT_LOGGING: std::sync::Once = std::sync::Once::new();
 
@@ -46,6 +48,7 @@ enum CreepMemory {
 struct SharedData {
     spawn: StructureSpawn,
     room: Room,
+    source_alloc: SourceAllocator,
 }
 
 #[wasm_bindgen]
@@ -94,9 +97,14 @@ pub fn game_loop() {
     }
 
     let creeps = game::creeps();
-    let d = SharedData {
-        spawn: game::spawns().values().next().unwrap(),
-        room: game::rooms().values().next().unwrap(),
+    let spawn = game::spawns().values().next().unwrap();
+    let room = game::rooms().values().next().unwrap();
+    let sources = room.find(find::SOURCES, None);
+    let source_alloc = SourceAllocator::new(sources);
+    let mut d = SharedData {
+        spawn,
+        room,
+        source_alloc,
     };
 
     let towers = d
@@ -107,6 +115,15 @@ pub fn game_loop() {
     for tower in towers {
         tower::run(tower);
     }
+
+    for creep in creeps.values() {
+        if let Ok(memory) = from_value::<CreepMemory>(creep.memory())
+            && let CreepMemory::Harvester(memory) = &memory
+        {
+            d.source_alloc.register(creep, memory);
+        }
+    }
+    let harvester_spawn_size = d.source_alloc.allocate();
 
     for creep in creeps.values() {
         let Ok(mut memory) = from_value::<CreepMemory>(creep.memory()) else {
@@ -149,8 +166,8 @@ pub fn game_loop() {
             let visual = d.room.visual();
             visual.text(pos.x().u8() as f32, pos.y().u8() as f32, text, Some(style));
         }
-    } else if num_harvesters < 4 {
-        let body = if num_harvesters == 0 || d.room.energy_capacity_available() < 800 {
+    } else if harvester_spawn_size != 0 {
+        let body = if harvester_spawn_size == 1 || d.room.energy_capacity_available() < 800 {
             vec![Part::Move, Part::Move, Part::Work, Part::Carry]
         } else {
             vec![
