@@ -1,7 +1,7 @@
-use screeps::HasPosition;
 use screeps::StructureTower;
 use screeps::StructureType;
 use screeps::find;
+use screeps::prelude::*;
 
 use crate::utils::sort_unstable_by_distance;
 

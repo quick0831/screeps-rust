@@ -1,9 +1,6 @@
 use screeps::Creep;
-use screeps::HasHits;
-use screeps::HasPosition;
 use screeps::ObjectId;
 use screeps::ResourceType;
-use screeps::SharedCreepProperties;
 use screeps::Source;
 use screeps::StructureObject;
 use screeps::StructureType;
@@ -11,6 +8,7 @@ use screeps::action_error_codes::CreepRepairErrorCode;
 use screeps::action_error_codes::HarvestErrorCode;
 use screeps::action_error_codes::TransferErrorCode;
 use screeps::find;
+use screeps::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::SharedData;

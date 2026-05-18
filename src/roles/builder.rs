@@ -1,14 +1,12 @@
 use screeps::ConstructionSite;
 use screeps::Creep;
-use screeps::HasPosition;
-use screeps::MaybeHasId;
 use screeps::ObjectId;
 use screeps::ResourceType;
-use screeps::SharedCreepProperties;
 use screeps::StructureType;
 use screeps::action_error_codes::BuildErrorCode;
 use screeps::action_error_codes::WithdrawErrorCode;
 use screeps::find;
+use screeps::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::SharedData;

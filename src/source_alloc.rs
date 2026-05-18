@@ -1,6 +1,10 @@
 use std::collections::BTreeMap;
 
-use screeps::{Creep, HasId, MaybeHasId, ObjectId, Part, Source};
+use screeps::Creep;
+use screeps::ObjectId;
+use screeps::Part;
+use screeps::Source;
+use screeps::prelude::*;
 
 use crate::roles::harvester::HarvesterMemory;
 

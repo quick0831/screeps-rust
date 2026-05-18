@@ -1,11 +1,10 @@
 use screeps::Creep;
-use screeps::HasPosition;
 use screeps::ResourceType;
-use screeps::SharedCreepProperties;
 use screeps::StructureType;
 use screeps::action_error_codes::UpgradeControllerErrorCode;
 use screeps::action_error_codes::WithdrawErrorCode;
 use screeps::find;
+use screeps::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::SharedData;

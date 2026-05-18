@@ -1,7 +1,7 @@
 use std::cmp::max;
 
-use screeps::HasPosition;
 use screeps::Position;
+use screeps::prelude::*;
 
 pub fn diagonal_distance(a: Position, b: Position) -> u8 {
     let (ax, ay) = a.coords();
