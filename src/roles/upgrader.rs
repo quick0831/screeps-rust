@@ -23,7 +23,7 @@ pub fn run(creep: &Creep, memory: &mut UpgraderMemory, d: &SharedData) {
         memory.upgrading = false;
         let energy_avail = d.room.energy_available();
         let energy_cap = d.room.energy_capacity_available();
-        memory.fetch = energy_avail > 250 && energy_cap - energy_avail < 200;
+        memory.fetch = energy_avail > 250 && energy_cap - energy_avail < 300;
         let msg = if memory.fetch { "🫳 fetch" } else { "⏸️" };
         let _ = creep.say(msg, false);
     }
