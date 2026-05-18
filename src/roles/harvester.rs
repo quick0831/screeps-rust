@@ -1,10 +1,13 @@
 use screeps::Creep;
+use screeps::HasHits;
 use screeps::HasPosition;
 use screeps::ObjectId;
 use screeps::ResourceType;
 use screeps::SharedCreepProperties;
 use screeps::Source;
+use screeps::StructureObject;
 use screeps::StructureType;
+use screeps::action_error_codes::CreepRepairErrorCode;
 use screeps::action_error_codes::HarvestErrorCode;
 use screeps::action_error_codes::TransferErrorCode;
 use screeps::find;
@@ -59,6 +62,16 @@ pub fn run(creep: &Creep, memory: &mut HarvesterMemory, d: &SharedData) {
                     > 0
             })
             .collect::<Vec<_>>();
+        if let Some(container) = containers.first()
+            && let StructureObject::StructureContainer(container) = container
+            && (container.hits() as f32 / container.hits_max() as f32) < 0.4
+        {
+            let err = creep.repair(container);
+            if let Err(CreepRepairErrorCode::NotInRange) = err {
+                let _ = creep.move_to(container.clone());
+            }
+            return;
+        }
         let mut targets = d
             .room
             .find(find::MY_STRUCTURES, None)
