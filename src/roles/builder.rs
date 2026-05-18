@@ -12,6 +12,7 @@ use screeps::find;
 use serde::{Deserialize, Serialize};
 
 use crate::SharedData;
+use crate::path_away::path_away_from;
 use crate::utils::sort_unstable_by_distance;
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -77,5 +78,8 @@ pub fn run(creep: &Creep, memory: &mut BuilderMemory, d: &SharedData) {
                 let _ = creep.move_to(target.clone());
             }
         }
+    } else {
+        // move away from spawn
+        let _ = path_away_from(creep, d.spawn.pos(), 7);
     }
 }

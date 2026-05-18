@@ -11,6 +11,7 @@ use screeps::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::SharedData;
+use crate::path_away::path_away_from;
 use crate::utils::sort_unstable_by_distance;
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -20,7 +21,7 @@ pub struct HaulerMemory {
     carrying: bool,
 }
 
-pub fn run(creep: &Creep, memory: &mut HaulerMemory, _d: &SharedData) {
+pub fn run(creep: &Creep, memory: &mut HaulerMemory, d: &SharedData) {
     if creep.store().get_free_capacity(None) == 0 {
         memory.carrying = true;
     }
@@ -76,5 +77,8 @@ pub fn run(creep: &Creep, memory: &mut HaulerMemory, _d: &SharedData) {
         if let Err(WithdrawErrorCode::NotInRange) = err {
             let _ = creep.move_to(target.clone());
         }
+    } else {
+        // move away from spawn
+        let _ = path_away_from(creep, d.spawn.pos(), 7);
     }
 }

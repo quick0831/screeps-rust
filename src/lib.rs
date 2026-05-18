@@ -25,6 +25,7 @@ use strum::IntoDiscriminant;
 use wasm_bindgen::prelude::*;
 
 mod logging;
+mod path_away;
 mod roles;
 mod source_alloc;
 mod tower;
