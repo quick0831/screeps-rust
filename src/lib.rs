@@ -206,18 +206,31 @@ pub fn game_loop() {
         let _ = spawn_creep(&body, &name, &mem);
     }
 
+    let controller = d.room.controller().unwrap();
+    let rcl = controller.level();
+    let rcl_progress = controller.progress().unwrap_or(0);
+    let rcl_progress_total = controller.progress_total().unwrap_or(0);
+    let rcl_ratio = rcl_progress as f32 * 100. / rcl_progress_total as f32;
+
+    let texts: [String; _] = [
+        format!("Time: {time}"),
+        format!(
+            "Energy: {} / {}",
+            d.room.energy_available(),
+            d.room.energy_capacity_available()
+        ),
+        format!("RCL {rcl}: {rcl_progress} / {rcl_progress_total} ({rcl_ratio:.2}%)"),
+        format!("Haulers: {num_haulers}"),
+        format!("Harvesters: {num_harvesters}"),
+        format!("Upgraders: {num_upgraders}"),
+        format!("Builders: {num_builders}"),
+    ];
+
     let style = TextStyle::default().align(TextAlign::Left);
     let visual = d.room.visual();
-    let text = format!("Time: {time}");
-    visual.text(0., 1., text, Some(style.clone()));
-    let text = format!("Haulers: {num_haulers}");
-    visual.text(0., 2., text, Some(style.clone()));
-    let text = format!("Harvesters: {num_harvesters}");
-    visual.text(0., 3., text, Some(style.clone()));
-    let text = format!("Upgraders: {num_upgraders}");
-    visual.text(0., 4., text, Some(style.clone()));
-    let text = format!("Builders: {num_builders}");
-    visual.text(0., 5., text, Some(style.clone()));
+    for (idx, text) in texts.into_iter().enumerate() {
+        visual.text(0., (idx + 1) as f32, text, Some(style.clone()));
+    }
 
     let pos = d.spawn.pos();
     let x = pos.x().u8();
