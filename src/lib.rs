@@ -224,14 +224,16 @@ pub fn game_loop() {
     let y = pos.y().u8();
     for i in (x - 3)..=(x + 3) {
         for j in (y - 3)..=(y + 3) {
-            let ty = if (i + j + x + y).is_multiple_of(2) {
+            let dist = i.abs_diff(x) + j.abs_diff(y);
+            if dist == 0 {
+                continue;
+            }
+            let ty = if dist == 1 || (i + j + x + y).is_multiple_of(2) {
                 StructureType::Road
             } else {
                 StructureType::Extension
             };
-            if i.abs_diff(x) + j.abs_diff(y) > 1 {
-                let _ = d.room.create_construction_site(i, j, ty, None);
-            }
+            let _ = d.room.create_construction_site(i, j, ty, None);
         }
     }
 
