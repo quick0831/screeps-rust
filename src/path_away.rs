@@ -15,12 +15,12 @@ pub fn path_away_from(
     target: Position,
     range: u32,
 ) -> Result<(), CreepMoveByPathErrorCode> {
-    let callback = |_| {
+    // TODO: cache the result when queried on the same tick
+    let callback = |room| {
         let cost_matrix = CostMatrix::new();
-        let current_room = creep.pos().room_name();
         for c in game::creeps().values() {
             let pos = c.pos();
-            if pos.room_name() == current_room {
+            if pos.room_name() == room {
                 let (x, y) = pos.coords();
                 cost_matrix.set(x, y, COST_UNWALKABLE);
             }
