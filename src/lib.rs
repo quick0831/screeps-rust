@@ -7,6 +7,7 @@ use js_sys::Object;
 use js_sys::Reflect;
 use log::info;
 use log::warn;
+use screeps::Creep;
 use screeps::Part;
 use screeps::Room;
 use screeps::SpawnOptions;
@@ -122,19 +123,19 @@ pub fn game_loop() {
         tower::run(tower);
     }
 
-    for creep in creeps.values() {
-        if let Ok(memory) = from_value::<CreepMemory>(creep.memory())
-            && let CreepMemory::Harvester(memory) = &memory
-        {
+    let creep_mems: Vec<(Creep, CreepMemory)> = creeps
+        .values()
+        .filter_map(|creep| from_value(creep.memory()).ok().map(|mem| (creep, mem)))
+        .collect();
+
+    for (creep, memory) in &creep_mems {
+        if let CreepMemory::Harvester(memory) = &memory {
             d.source_alloc.register(creep, memory);
         }
     }
     let harvester_spawn_size = d.source_alloc.allocate();
 
-    for creep in creeps.values() {
-        let Ok(mut memory) = from_value::<CreepMemory>(creep.memory()) else {
-            continue;
-        };
+    for (creep, mut memory) in creep_mems {
         match &mut memory {
             CreepMemory::Hauler(memory) => hauler::run(&creep, memory, &d),
             CreepMemory::Harvester(memory) => harvester::run(&creep, memory, &d),

@@ -30,7 +30,7 @@ impl SourceAllocator {
         }
     }
 
-    pub fn register(&mut self, creep: Creep, memory: &HarvesterMemory) {
+    pub fn register(&mut self, creep: &Creep, memory: &HarvesterMemory) {
         if let Some(id) = creep.try_id() {
             let info = Info {
                 target: memory.get_target(),
