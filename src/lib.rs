@@ -257,4 +257,12 @@ pub fn game_loop() {
     if cpu_usage.floor() as u32 > cpu_limit {
         warn!("Detect CPU spike: {cpu_usage:.2}/{cpu_limit}");
     }
+
+    #[cfg(feature = "mmo")]
+    if game::cpu::bucket() >= screeps::PIXEL_CPU_COST as i32 {
+        match game::cpu::generate_pixel() {
+            Ok(()) => info!("Generated pixel!"),
+            Err(err) => warn!("Generate pixel failed: {err}"),
+        }
+    }
 }
