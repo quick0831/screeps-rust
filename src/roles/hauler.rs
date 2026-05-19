@@ -24,24 +24,27 @@ pub struct HaulerMemory {
 pub fn run(creep: &Creep, memory: &mut HaulerMemory, d: &SharedData) {
     if creep.store().get_free_capacity(None) == 0 {
         memory.carrying = true;
+        memory.target = None;
     }
     if creep.store().get(ResourceType::Energy).unwrap_or(0) == 0 {
         memory.carrying = false;
 
-        let structures = creep.room().unwrap().find(find::STRUCTURES, None);
-        let mut targets = structures
-            .into_iter()
-            .filter_map(|s| {
-                if let StructureObject::StructureContainer(c) = s {
-                    let energy = c.store().get(ResourceType::Energy).unwrap_or(0);
-                    Some((c, energy))
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<_>>();
-        targets.sort_unstable_by_key(|(_, energy)| *energy);
-        memory.target = targets.last().map(|(c, _)| c.id());
+        if memory.target.is_none() {
+            let structures = creep.room().unwrap().find(find::STRUCTURES, None);
+            let mut targets = structures
+                .into_iter()
+                .filter_map(|s| {
+                    if let StructureObject::StructureContainer(c) = s {
+                        let energy = c.store().get(ResourceType::Energy).unwrap_or(0);
+                        Some((c, energy))
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>();
+            targets.sort_unstable_by_key(|(_, energy)| *energy);
+            memory.target = targets.last().map(|(c, _)| c.id());
+        }
     }
 
     if memory.carrying {
