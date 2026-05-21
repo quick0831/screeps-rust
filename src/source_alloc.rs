@@ -6,8 +6,6 @@ use screeps::Part;
 use screeps::Source;
 use screeps::prelude::*;
 
-use crate::roles::harvester::HarvesterMemory;
-
 #[derive(Debug)]
 pub struct SourceAllocator {
     creeps: BTreeMap<ObjectId<Creep>, Info>,
@@ -33,10 +31,10 @@ impl SourceAllocator {
         }
     }
 
-    pub fn register(&mut self, creep: &Creep, memory: &HarvesterMemory) {
+    pub fn register_harvester(&mut self, creep: &Creep, target: Option<ObjectId<Source>>) {
         if let Some(id) = creep.try_id() {
             let info = Info {
-                target: memory.get_target(),
+                target,
                 size: creep
                     .body()
                     .into_iter()

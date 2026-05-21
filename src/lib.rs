@@ -128,13 +128,17 @@ pub fn game_loop() {
         .filter_map(|creep| from_value(creep.memory()).ok().map(|mem| (creep, mem)))
         .collect();
 
+    // Register stage
     for (creep, memory) in &creep_mems {
         if let CreepMemory::Harvester(memory) = &memory {
-            d.source_alloc.register(creep, memory);
+            harvester::register(creep, memory, &mut d)
         }
     }
+
+    // Allocation stage
     let harvester_spawn_size = d.source_alloc.allocate();
 
+    // Execute stage
     for (creep, mut memory) in creep_mems {
         match &mut memory {
             CreepMemory::Hauler(memory) => hauler::run(&creep, memory, &d),
