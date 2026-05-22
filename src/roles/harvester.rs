@@ -12,6 +12,7 @@ use screeps::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::SharedData;
+use crate::transport_alloc::EnergyStore;
 use crate::utils::diagonal_distance;
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -29,11 +30,16 @@ enum HarvesterState {
     Harvest,
     Repair,
     Deposit,
+    WaitHauler,
     DepositSpawn,
 }
 
 pub fn register(creep: &Creep, memory: &HarvesterMemory, d: &mut SharedData) {
     d.source_alloc.register_harvester(creep, memory.target);
+    if memory.state == HarvesterState::WaitHauler {
+        d.transport_alloc
+            .file_request(EnergyStore::Creep(creep.clone()));
+    }
 }
 
 pub fn run(creep: &Creep, memory: &mut HarvesterMemory, d: &SharedData) {
@@ -64,7 +70,7 @@ pub fn run(creep: &Creep, memory: &mut HarvesterMemory, d: &SharedData) {
             }
         } else {
             memory.container = None;
-            memory.state = HarvesterState::DepositSpawn;
+            memory.state = HarvesterState::WaitHauler;
         }
     }
     if creep.store().get(ResourceType::Energy).unwrap_or(0) == 0 {
@@ -79,7 +85,7 @@ pub fn run(creep: &Creep, memory: &mut HarvesterMemory, d: &SharedData) {
         }
         HarvesterState::Repair => {
             let Some(container) = memory.container.and_then(|id| id.resolve()) else {
-                memory.state = HarvesterState::DepositSpawn;
+                memory.state = HarvesterState::WaitHauler;
                 return;
             };
             let err = creep.repair(&container);
@@ -89,7 +95,7 @@ pub fn run(creep: &Creep, memory: &mut HarvesterMemory, d: &SharedData) {
         }
         HarvesterState::Deposit => {
             let Some(container) = memory.container.and_then(|id| id.resolve()) else {
-                memory.state = HarvesterState::DepositSpawn;
+                memory.state = HarvesterState::WaitHauler;
                 return;
             };
             let err = creep.transfer(&container, ResourceType::Energy, None);
@@ -97,6 +103,7 @@ pub fn run(creep: &Creep, memory: &mut HarvesterMemory, d: &SharedData) {
                 let _ = creep.move_to(&container);
             }
         }
+        HarvesterState::WaitHauler => {}
         HarvesterState::DepositSpawn => {
             let err = creep.transfer(&d.spawn, ResourceType::Energy, None);
             if let Err(TransferErrorCode::NotInRange) = err {

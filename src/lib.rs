@@ -10,8 +10,10 @@ use log::info;
 use log::warn;
 use screeps::Creep;
 use screeps::Part;
+use screeps::ResourceType;
 use screeps::Room;
 use screeps::SpawnOptions;
+use screeps::StructureContainer;
 use screeps::StructureSpawn;
 use screeps::StructureTower;
 use screeps::StructureType;
@@ -31,6 +33,7 @@ mod path_away;
 mod roles;
 mod source_alloc;
 mod tower;
+mod transport_alloc;
 mod utils;
 
 use crate::roles::builder::{self, BuilderMemory};
@@ -39,6 +42,8 @@ use crate::roles::hauler;
 use crate::roles::hauler::HaulerMemory;
 use crate::roles::upgrader::{self, UpgraderMemory};
 use crate::source_alloc::SourceAllocator;
+use crate::transport_alloc::EnergyStore;
+use crate::transport_alloc::TransportAllocator;
 
 static INIT_LOGGING: std::sync::Once = std::sync::Once::new();
 
@@ -57,6 +62,7 @@ struct SharedData {
     spawn: StructureSpawn,
     room: Room,
     source_alloc: SourceAllocator,
+    transport_alloc: TransportAllocator,
 }
 
 #[wasm_bindgen]
@@ -109,10 +115,12 @@ pub fn game_loop() {
     let room = game::rooms().values().next().unwrap();
     let sources = room.find(find::SOURCES, None);
     let source_alloc = SourceAllocator::new(sources);
+    let transport_alloc = TransportAllocator::new();
     let mut d = SharedData {
         spawn,
         room,
         source_alloc,
+        transport_alloc,
     };
 
     let towers = d
@@ -131,13 +139,27 @@ pub fn game_loop() {
 
     // Register stage
     for (creep, memory) in &creep_mems {
-        if let CreepMemory::Harvester(memory) = &memory {
-            harvester::register(creep, memory, &mut d)
+        match memory {
+            CreepMemory::Hauler(memory) => hauler::register(creep, memory, &mut d),
+            CreepMemory::Harvester(memory) => harvester::register(creep, memory, &mut d),
+            _ => {}
         }
+    }
+
+    for non_empty_container in d
+        .room
+        .find(find::STRUCTURES, None)
+        .into_iter()
+        .filter_map(|s| -> Option<StructureContainer> { s.try_into().ok() })
+        .filter(|c| c.store().get(ResourceType::Energy).unwrap_or(0) > 0)
+    {
+        d.transport_alloc
+            .file_request(EnergyStore::Container(non_empty_container));
     }
 
     // Allocation stage
     let harvester_spawn_size = d.source_alloc.allocate();
+    d.transport_alloc.allocate();
 
     // Execute stage
     for (creep, mut memory) in creep_mems {
@@ -200,7 +222,7 @@ pub fn game_loop() {
         let mem = CreepMemory::Hauler(HaulerMemory::default());
         spawn_creep(&body, &name, &mem);
     } else if harvester_spawn_size != 0 {
-        let unit_part = [Part::Move, Part::Move, Part::Work, Part::Carry];
+        let unit_part = [Part::Move, Part::Work, Part::Carry];
         let unit_cost: u32 = unit_part.map(Part::cost).into_iter().sum();
         let spawn_cap = (max(300, d.room.energy_capacity_available() - 300) / unit_cost) as u8;
         let spawn_size = min(harvester_spawn_size, spawn_cap) as usize;
