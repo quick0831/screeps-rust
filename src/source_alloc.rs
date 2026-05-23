@@ -65,9 +65,9 @@ impl SourceAllocator {
             .filter(|(_, info)| info.target.is_none())
             .map(|(creep, info)| (*creep, info.size))
             .collect();
-        unbound.sort_unstable_by_key(|(_, size)| -(*size as i8));
+        unbound.sort_unstable_by_key(|(_, size)| *size);
 
-        for (creep, size) in unbound {
+        for (creep, size) in unbound.into_iter().rev() {
             allocs.sort_unstable_by_key(|(_, slot)| *slot);
             let (source_id, alloc) = allocs[0];
             if alloc >= SLOTS_PER_SOURCE {
