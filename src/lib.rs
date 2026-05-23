@@ -22,9 +22,7 @@ use screeps::TextStyle;
 use screeps::find;
 use screeps::game;
 use screeps::prelude::*;
-use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
-use strum::EnumDiscriminants;
 use strum::IntoDiscriminant;
 use wasm_bindgen::prelude::*;
 
@@ -36,27 +34,12 @@ mod tower;
 mod transport_alloc;
 mod utils;
 
-use crate::roles::builder::{self, BuilderMemory};
-use crate::roles::harvester::{self, HarvesterMemory};
-use crate::roles::hauler;
-use crate::roles::hauler::HaulerMemory;
-use crate::roles::upgrader::{self, UpgraderMemory};
+use crate::roles::*;
 use crate::source_alloc::SourceAllocator;
 use crate::transport_alloc::EnergyStore;
 use crate::transport_alloc::TransportAllocator;
 
 static INIT_LOGGING: std::sync::Once = std::sync::Once::new();
-
-#[derive(Debug, Serialize, Deserialize, EnumDiscriminants)]
-#[serde(rename_all = "snake_case", tag = "role")]
-#[strum_discriminants(name(CreepRole))]
-#[strum_discriminants(derive(strum::Display))]
-enum CreepMemory {
-    Hauler(HaulerMemory),
-    Harvester(HarvesterMemory),
-    Upgrader(UpgraderMemory),
-    Builder(BuilderMemory),
-}
 
 struct SharedData {
     spawn: StructureSpawn,
@@ -131,29 +114,25 @@ pub fn game_loop() {
         tower::run(tower);
     }
 
-    let creep_mems: Vec<(Creep, CreepMemory)> = game::creeps()
+    let creep_mems: Vec<(Creep, Role)> = game::creeps()
         .values()
         .filter_map(|creep| from_value(creep.memory()).ok().map(|mem| (creep, mem)))
         .collect();
 
-    let roles: Vec<CreepRole> = creep_mems
+    let roles: Vec<RoleType> = creep_mems
         .iter()
         .map(|(_, memory)| memory.discriminant())
         .collect();
 
     let num_roles = |role| roles.iter().filter(|c| **c == role).count();
-    let num_haulers = num_roles(CreepRole::Hauler);
-    let num_harvesters = num_roles(CreepRole::Harvester);
-    let num_upgraders = num_roles(CreepRole::Upgrader);
-    let num_builders = num_roles(CreepRole::Builder);
+    let num_haulers = num_roles(RoleType::Hauler);
+    let num_harvesters = num_roles(RoleType::Harvester);
+    let num_upgraders = num_roles(RoleType::Upgrader);
+    let num_builders = num_roles(RoleType::Builder);
 
     // Register stage
     for (creep, memory) in &creep_mems {
-        match memory {
-            CreepMemory::Hauler(memory) => hauler::register(creep, memory, &mut d),
-            CreepMemory::Harvester(memory) => harvester::register(creep, memory, &mut d),
-            _ => {}
-        }
+        memory.register(creep, &mut d);
     }
 
     for non_empty_container in d
@@ -173,19 +152,14 @@ pub fn game_loop() {
 
     // Execute stage
     for (creep, mut memory) in creep_mems {
-        match &mut memory {
-            CreepMemory::Hauler(memory) => hauler::run(&creep, memory, &d),
-            CreepMemory::Harvester(memory) => harvester::run(&creep, memory, &d),
-            CreepMemory::Upgrader(memory) => upgrader::run(&creep, memory, &d),
-            CreepMemory::Builder(memory) => builder::run(&creep, memory, &d),
-        }
+        memory.run(&creep, &d);
 
         creep.set_memory(&to_value(&memory).expect("Failed to serialize memory"));
     }
 
     let has_construction_sites = !d.room.find(find::CONSTRUCTION_SITES, None).is_empty();
 
-    let spawn_creep = |body: &[Part], name: &str, mem: &CreepMemory| {
+    let spawn_creep = |body: &[Part], name: &str, mem: &Role| {
         let cost: u32 = body.iter().map(|p| p.cost()).sum();
         if d.room.energy_available() > cost {
             let option = SpawnOptions::new().memory(to_value(mem).unwrap());
@@ -202,7 +176,7 @@ pub fn game_loop() {
     if let Some(spawning) = d.spawn.spawning() {
         if let Some(name) = spawning.name().as_string()
             && let Some(creep) = game::creeps().get(name)
-            && let Ok(memory) = from_value::<CreepMemory>(creep.memory())
+            && let Ok(memory) = from_value::<Role>(creep.memory())
         {
             let role = memory.discriminant();
             let pos = d.spawn.pos();
@@ -214,7 +188,7 @@ pub fn game_loop() {
     } else if num_haulers < 2 && num_haulers < num_harvesters {
         let body = vec![Part::Move, Part::Move, Part::Carry, Part::Carry];
         let name = format!("Hauler{time}");
-        let mem = CreepMemory::Hauler(HaulerMemory::default());
+        let mem = Hauler::default().into();
         spawn_creep(&body, &name, &mem);
     } else if harvester_spawn_size != 0 {
         let unit_part = [Part::Move, Part::Work, Part::Carry];
@@ -223,17 +197,17 @@ pub fn game_loop() {
         let spawn_size = min(harvester_spawn_size, spawn_cap) as usize;
         let body = unit_part.repeat(spawn_size);
         let name = format!("Harvester{time}");
-        let mem = CreepMemory::Harvester(HarvesterMemory::default());
+        let mem = Harvester::default().into();
         spawn_creep(&body, &name, &mem);
     } else if num_upgraders < 3 {
         let body = vec![Part::Move, Part::Move, Part::Work, Part::Carry];
         let name = format!("Upgrader{time}");
-        let mem = CreepMemory::Upgrader(UpgraderMemory::default());
+        let mem = Upgrader::default().into();
         spawn_creep(&body, &name, &mem);
     } else if num_builders < 2 && has_construction_sites {
         let body = vec![Part::Move, Part::Move, Part::Work, Part::Carry];
         let name = format!("Builder{time}");
-        let mem = CreepMemory::Builder(BuilderMemory::default());
+        let mem = Builder::default().into();
         spawn_creep(&body, &name, &mem);
     }
 

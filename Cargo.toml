@@ -24,6 +24,7 @@ web-sys = { version = "0.3", features = ["console"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde-wasm-bindgen = "0.6.5"
 strum = { version = "0.28.0", features = ["derive"] }
+enum_dispatch = "0.3.13"
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3"

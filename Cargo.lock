@@ -278,6 +278,7 @@ dependencies = [
 name = "screeps-rust"
 version = "0.1.0"
 dependencies = [
+ "enum_dispatch",
  "fern",
  "js-sys",
  "log",
