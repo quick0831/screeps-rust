@@ -1,3 +1,4 @@
+use std::cmp::min;
 use std::collections::BTreeMap;
 
 use screeps::Creep;
@@ -77,8 +78,17 @@ impl SourceAllocator {
             allocs[0].1 += size;
         }
 
+        let max_creep_size = self
+            .creeps
+            .values()
+            .map(|info| info.size)
+            .max()
+            .unwrap_or(0);
+
         allocs.sort_unstable_by_key(|(_, slot)| *slot);
-        SLOTS_PER_SOURCE.saturating_sub(allocs[0].1)
+        let spawn_size = SLOTS_PER_SOURCE.saturating_sub(allocs[0].1);
+
+        min(spawn_size, max_creep_size + 1)
     }
 
     pub fn delegate(&self, creep: &Creep) -> Option<ObjectId<Source>> {
