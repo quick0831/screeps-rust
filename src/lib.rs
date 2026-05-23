@@ -110,7 +110,6 @@ pub fn game_loop() {
         });
     }
 
-    let creeps = game::creeps();
     let spawn = game::spawns().values().next().unwrap();
     let room = game::rooms().values().next().unwrap();
     let sources = room.find(find::SOURCES, None);
@@ -132,10 +131,21 @@ pub fn game_loop() {
         tower::run(tower);
     }
 
-    let creep_mems: Vec<(Creep, CreepMemory)> = creeps
+    let creep_mems: Vec<(Creep, CreepMemory)> = game::creeps()
         .values()
         .filter_map(|creep| from_value(creep.memory()).ok().map(|mem| (creep, mem)))
         .collect();
+
+    let roles: Vec<CreepRole> = creep_mems
+        .iter()
+        .map(|(_, memory)| memory.discriminant())
+        .collect();
+
+    let num_roles = |role| roles.iter().filter(|c| **c == role).count();
+    let num_haulers = num_roles(CreepRole::Hauler);
+    let num_harvesters = num_roles(CreepRole::Harvester);
+    let num_upgraders = num_roles(CreepRole::Upgrader);
+    let num_builders = num_roles(CreepRole::Builder);
 
     // Register stage
     for (creep, memory) in &creep_mems {
@@ -172,21 +182,6 @@ pub fn game_loop() {
 
         creep.set_memory(&to_value(&memory).expect("Failed to serialize memory"));
     }
-
-    let roles: Vec<CreepRole> = creeps
-        .values()
-        .filter_map(|creep| {
-            from_value::<CreepMemory>(creep.memory())
-                .ok()
-                .map(|mem| mem.discriminant())
-        })
-        .collect();
-
-    let num_roles = |role| roles.iter().filter(|c| **c == role).count();
-    let num_haulers = num_roles(CreepRole::Hauler);
-    let num_harvesters = num_roles(CreepRole::Harvester);
-    let num_upgraders = num_roles(CreepRole::Upgrader);
-    let num_builders = num_roles(CreepRole::Builder);
 
     let has_construction_sites = !d.room.find(find::CONSTRUCTION_SITES, None).is_empty();
 
