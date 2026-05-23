@@ -82,7 +82,7 @@ pub fn game_loop() {
 
     // memory cleanup; memory gets created for all creeps upon spawning, and any time move_to
     // is used; this should be removed if you're using RawMemory/serde for persistence
-    if time.is_multiple_of(1000) {
+    if time.is_multiple_of(100) {
         info!("running memory cleanup");
         let mut alive_creeps = HashSet::new();
         // add all living creep names to a hashset
