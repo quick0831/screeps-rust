@@ -1,6 +1,6 @@
-use std::collections::BTreeMap;
-use std::collections::BTreeSet;
 use std::collections::BinaryHeap;
+use std::collections::HashMap;
+use std::collections::HashSet;
 
 use screeps::CARRY_CAPACITY;
 use screeps::Creep;
@@ -18,7 +18,7 @@ use crate::utils::KeyCmp;
 
 pub struct TransportAllocator {
     providers: Vec<EnergyStore>,
-    haulers: BTreeMap<ObjectId<Creep>, Info>,
+    haulers: HashMap<ObjectId<Creep>, Info>,
 }
 
 struct Info {
@@ -30,7 +30,7 @@ impl TransportAllocator {
     pub fn new() -> Self {
         TransportAllocator {
             providers: Vec::new(),
-            haulers: BTreeMap::new(),
+            haulers: HashMap::new(),
         }
     }
 
@@ -52,7 +52,7 @@ impl TransportAllocator {
     }
 
     pub fn allocate(&mut self) {
-        let being_served: BTreeSet<_> = self
+        let being_served: HashSet<_> = self
             .haulers
             .iter()
             .filter_map(|(_, info)| info.target)
