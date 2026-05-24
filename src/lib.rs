@@ -151,8 +151,12 @@ pub fn game_loop() {
             let visual = d.room.visual();
             visual.text(pos.x().u8() as f32, pos.y().u8() as f32, text, Some(style));
         }
-    } else if num_haulers < 2 && num_haulers < num_harvesters {
-        let body = vec![Part::Move, Part::Move, Part::Carry, Part::Carry];
+    } else if num_haulers < 3 && num_harvesters >= 1 {
+        let unit_part = [Part::Move, Part::Carry];
+        let unit_cost: u32 = unit_part.map(Part::cost).into_iter().sum();
+        let spawn_cap = (max(300, d.room.energy_capacity_available() - 300) / unit_cost) as u8;
+        let spawn_size = min(6, spawn_cap) as usize;
+        let body = unit_part.repeat(spawn_size);
         let name = format!("Hauler{time}");
         let mem = Hauler::default().into();
         spawn_creep(&body, &name, &mem);
