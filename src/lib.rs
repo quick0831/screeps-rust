@@ -1,14 +1,8 @@
-use std::cmp::max;
-use std::cmp::min;
-
-use log::error;
 use log::info;
 use log::warn;
 use screeps::Creep;
-use screeps::Part;
 use screeps::ResourceType;
 use screeps::Room;
-use screeps::SpawnOptions;
 use screeps::StructureContainer;
 use screeps::StructureSpawn;
 use screeps::StructureTower;
@@ -19,7 +13,7 @@ use screeps::find;
 use screeps::game;
 use screeps::prelude::*;
 use serde_wasm_bindgen::{from_value, to_value};
-use strum::IntoDiscriminant;
+use strum::IntoDiscriminant as _;
 use wasm_bindgen::prelude::*;
 
 mod logging;
@@ -27,6 +21,7 @@ mod memory;
 mod path_away;
 mod roles;
 mod source_alloc;
+mod spawn;
 mod tower;
 mod transport_alloc;
 mod utils;
@@ -34,6 +29,7 @@ mod utils;
 use crate::memory::cleanup_memory;
 use crate::roles::*;
 use crate::source_alloc::SourceAllocator;
+use crate::spawn::process_spawning;
 use crate::transport_alloc::EnergyStore;
 use crate::transport_alloc::TransportAllocator;
 
@@ -44,6 +40,22 @@ struct SharedData {
     room: Room,
     source_alloc: SourceAllocator,
     transport_alloc: TransportAllocator,
+    role_count: RoleCount,
+    energy: EnergyStatus,
+}
+
+#[derive(Debug, Default)]
+struct RoleCount {
+    haulers: usize,
+    harvesters: usize,
+    upgraders: usize,
+    builders: usize,
+}
+
+#[derive(Debug, Default)]
+struct EnergyStatus {
+    available: u32,
+    capacity: u32,
 }
 
 #[wasm_bindgen(js_name = loop)]
@@ -64,11 +76,19 @@ pub fn game_loop() {
     let sources = room.find(find::SOURCES, None);
     let source_alloc = SourceAllocator::new(sources);
     let transport_alloc = TransportAllocator::new();
+    let role_count = RoleCount::default();
+    let energy = EnergyStatus {
+        available: room.energy_available(),
+        capacity: room.energy_capacity_available(),
+    };
+
     let mut d = SharedData {
         spawn,
         room,
         source_alloc,
         transport_alloc,
+        role_count,
+        energy,
     };
 
     let towers = d
@@ -91,10 +111,10 @@ pub fn game_loop() {
         .collect();
 
     let num_roles = |role| roles.iter().filter(|c| **c == role).count();
-    let num_haulers = num_roles(RoleType::Hauler);
-    let num_harvesters = num_roles(RoleType::Harvester);
-    let num_upgraders = num_roles(RoleType::Upgrader);
-    let num_builders = num_roles(RoleType::Builder);
+    d.role_count.haulers = num_roles(RoleType::Hauler);
+    d.role_count.harvesters = num_roles(RoleType::Harvester);
+    d.role_count.upgraders = num_roles(RoleType::Upgrader);
+    d.role_count.builders = num_roles(RoleType::Builder);
 
     // Register stage
     for (creep, memory) in &creep_mems {
@@ -113,7 +133,7 @@ pub fn game_loop() {
     }
 
     // Allocation stage
-    let harvester_spawn_size = d.source_alloc.allocate();
+    d.source_alloc.allocate();
     d.transport_alloc.allocate();
 
     // Execute stage
@@ -123,67 +143,7 @@ pub fn game_loop() {
         creep.set_memory(&to_value(&memory).expect("Failed to serialize memory"));
     }
 
-    let has_construction_sites = !d.room.find(find::CONSTRUCTION_SITES, None).is_empty();
-
-    let spawn_creep = |body: &[Part], name: &str, mem: &Role| {
-        let cost: u32 = body.iter().map(|p| p.cost()).sum();
-        if d.room.energy_available() > cost {
-            let option = SpawnOptions::new().memory(to_value(mem).unwrap());
-            if let Err(err) = d.spawn.spawn_creep_with_options(body, name, &option) {
-                error!("Spawning error: {err}");
-            } else {
-                info!("Spawning: {name}");
-            }
-        } else {
-            info!("Spawning: Not enough energy!");
-        }
-    };
-
-    if let Some(spawning) = d.spawn.spawning() {
-        if let Some(name) = spawning.name().as_string()
-            && let Some(creep) = game::creeps().get(name)
-            && let Ok(memory) = from_value::<Role>(creep.memory())
-        {
-            let role = memory.discriminant();
-            let pos = d.spawn.pos();
-            let text = format!("🛠️ {role}");
-            let style = TextStyle::default().align(TextAlign::Left);
-            let visual = d.room.visual();
-            visual.text(pos.x().u8() as f32, pos.y().u8() as f32, text, Some(style));
-        }
-    } else if num_haulers < 3 && num_harvesters >= 1 {
-        let unit_part = [Part::Move, Part::Carry];
-        let unit_cost: u32 = unit_part.map(Part::cost).into_iter().sum();
-        let spawn_cap = (max(300, d.room.energy_capacity_available() - 300) / unit_cost) as u8;
-        let spawn_size = min(6, spawn_cap) as usize;
-        let body = unit_part.repeat(spawn_size);
-        let name = format!("Hauler{time}");
-        let mem = Hauler::default().into();
-        spawn_creep(&body, &name, &mem);
-    } else if harvester_spawn_size != 0 {
-        let unit_part = [Part::Move, Part::Work, Part::Carry];
-        let unit_cost: u32 = unit_part.map(Part::cost).into_iter().sum();
-        let spawn_cap = (max(300, d.room.energy_capacity_available() - 300) / unit_cost) as u8;
-        let spawn_size = min(harvester_spawn_size, spawn_cap) as usize;
-        let body = unit_part.repeat(spawn_size);
-        let name = format!("Harvester{time}");
-        let mem = Harvester::default().into();
-        spawn_creep(&body, &name, &mem);
-    } else if num_builders < 2 && has_construction_sites && num_upgraders != 0 {
-        let body = vec![Part::Move, Part::Move, Part::Work, Part::Carry];
-        let name = format!("Builder{time}");
-        let mem = Builder::default().into();
-        spawn_creep(&body, &name, &mem);
-    } else if d.room.energy_capacity_available() - d.room.energy_available() < 100 {
-        let unit_part = [Part::Move, Part::Move, Part::Work, Part::Carry];
-        let unit_cost: u32 = unit_part.map(Part::cost).into_iter().sum();
-        let spawn_cap = (max(300, d.room.energy_capacity_available() - 300) / unit_cost) as u8;
-        let spawn_size = min(6, spawn_cap) as usize;
-        let body = unit_part.repeat(spawn_size);
-        let name = format!("Upgrader{time}");
-        let mem = Upgrader::default().into();
-        spawn_creep(&body, &name, &mem);
-    }
+    process_spawning(&d);
 
     let controller = d.room.controller().unwrap();
     let rcl = controller.level();
@@ -193,16 +153,12 @@ pub fn game_loop() {
 
     let texts: [String; _] = [
         format!("Time: {time}"),
-        format!(
-            "Energy: {} / {}",
-            d.room.energy_available(),
-            d.room.energy_capacity_available()
-        ),
+        format!("Energy: {} / {}", d.energy.available, d.energy.capacity),
         format!("RCL {rcl}: {rcl_progress} / {rcl_progress_total} ({rcl_ratio:.2}%)"),
-        format!("Haulers: {num_haulers}"),
-        format!("Harvesters: {num_harvesters}"),
-        format!("Upgraders: {num_upgraders}"),
-        format!("Builders: {num_builders}"),
+        format!("Haulers: {}", d.role_count.haulers),
+        format!("Harvesters: {}", d.role_count.harvesters),
+        format!("Upgraders: {}", d.role_count.upgraders),
+        format!("Builders: {}", d.role_count.builders),
     ];
 
     let style = TextStyle::default().align(TextAlign::Left);

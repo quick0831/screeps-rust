@@ -11,6 +11,7 @@ use screeps::prelude::*;
 pub struct SourceAllocator {
     creeps: BTreeMap<ObjectId<Creep>, Info>,
     sources: Vec<ObjectId<Source>>,
+    creep_spawn_size: u8,
 }
 
 #[derive(Debug)]
@@ -29,6 +30,7 @@ impl SourceAllocator {
         SourceAllocator {
             creeps: BTreeMap::new(),
             sources: sources.into_iter().map(|s| s.id()).collect(),
+            creep_spawn_size: 0,
         }
     }
 
@@ -46,9 +48,9 @@ impl SourceAllocator {
         }
     }
 
-    pub fn allocate(&mut self) -> u8 {
+    pub fn allocate(&mut self) {
         if self.sources.is_empty() {
-            return 0;
+            return;
         }
 
         let mut allocs: Vec<(_, u8)> = self.sources.iter().cloned().map(|s| (s, 0)).collect();
@@ -88,10 +90,14 @@ impl SourceAllocator {
         allocs.sort_unstable_by_key(|(_, slot)| *slot);
         let spawn_size = SLOTS_PER_SOURCE.saturating_sub(allocs[0].1);
 
-        min(spawn_size, max_creep_size + 1)
+        self.creep_spawn_size = min(spawn_size, max_creep_size + 1);
     }
 
     pub fn delegate(&self, creep: &Creep) -> Option<ObjectId<Source>> {
         self.creeps.get(&creep.try_id()?)?.target
+    }
+
+    pub fn get_creep_spawn_size(&self) -> u8 {
+        self.creep_spawn_size
     }
 }
