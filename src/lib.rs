@@ -165,15 +165,19 @@ pub fn game_loop() {
         let name = format!("Harvester{time}");
         let mem = Harvester::default().into();
         spawn_creep(&body, &name, &mem);
-    } else if num_upgraders < 3 {
-        let body = vec![Part::Move, Part::Move, Part::Work, Part::Carry];
-        let name = format!("Upgrader{time}");
-        let mem = Upgrader::default().into();
-        spawn_creep(&body, &name, &mem);
-    } else if num_builders < 2 && has_construction_sites {
+    } else if num_builders < 2 && has_construction_sites && num_upgraders != 0 {
         let body = vec![Part::Move, Part::Move, Part::Work, Part::Carry];
         let name = format!("Builder{time}");
         let mem = Builder::default().into();
+        spawn_creep(&body, &name, &mem);
+    } else if d.room.energy_capacity_available() - d.room.energy_available() < 100 {
+        let unit_part = [Part::Move, Part::Move, Part::Work, Part::Carry];
+        let unit_cost: u32 = unit_part.map(Part::cost).into_iter().sum();
+        let spawn_cap = (max(300, d.room.energy_capacity_available() - 300) / unit_cost) as u8;
+        let spawn_size = min(6, spawn_cap) as usize;
+        let body = unit_part.repeat(spawn_size);
+        let name = format!("Upgrader{time}");
+        let mem = Upgrader::default().into();
         spawn_creep(&body, &name, &mem);
     }
 
