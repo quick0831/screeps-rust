@@ -44,10 +44,9 @@ impl RoleTrait for Hauler {
                     )
                 })
                 .filter(|s| {
-                    s.as_has_store()
-                        .map(|s| s.store().get_free_capacity(Some(ResourceType::Energy)))
-                        .unwrap_or(0)
-                        > 0
+                    s.as_has_store().map_or(0, |s| {
+                        s.store().get_free_capacity(Some(ResourceType::Energy))
+                    }) > 0
                 })
                 .collect::<Vec<_>>();
             targets = sort_unstable_by_distance(creep.pos(), targets);
