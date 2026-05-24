@@ -71,8 +71,35 @@ pub fn game_loop() {
         cleanup_memory();
     }
 
-    let spawn = game::spawns().values().next().unwrap();
-    let room = game::rooms().values().next().unwrap();
+    let spawns: Vec<StructureSpawn> = game::spawns().values().collect();
+    for room in game::rooms().values() {
+        let spawns = spawns
+            .iter()
+            .filter(|&s| s.room().is_some_and(|r| r == room))
+            .cloned()
+            .collect();
+
+        process_room(room, spawns, time);
+    }
+
+    let cpu_limit = game::cpu::limit();
+    let cpu_usage = game::cpu::get_used();
+
+    if cpu_usage.floor() as u32 > cpu_limit {
+        warn!("Detect CPU spike: {cpu_usage:.2}/{cpu_limit}");
+    }
+
+    #[cfg(feature = "mmo")]
+    if game::cpu::bucket() >= screeps::PIXEL_CPU_COST as i32 {
+        match game::cpu::generate_pixel() {
+            Ok(()) => info!("Generated pixel!"),
+            Err(err) => warn!("Generate pixel failed: {err}"),
+        }
+    }
+}
+
+fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
+    let spawn = spawns[0].clone();
     let sources = room.find(find::SOURCES, None);
     let source_alloc = SourceAllocator::new(sources);
     let transport_alloc = TransportAllocator::new();
@@ -182,21 +209,6 @@ pub fn game_loop() {
                 StructureType::Extension
             };
             let _ = d.room.create_construction_site(i, j, ty, None);
-        }
-    }
-
-    let cpu_limit = game::cpu::limit();
-    let cpu_usage = game::cpu::get_used();
-
-    if cpu_usage.floor() as u32 > cpu_limit {
-        warn!("Detect CPU spike: {cpu_usage:.2}/{cpu_limit}");
-    }
-
-    #[cfg(feature = "mmo")]
-    if game::cpu::bucket() >= screeps::PIXEL_CPU_COST as i32 {
-        match game::cpu::generate_pixel() {
-            Ok(()) => info!("Generated pixel!"),
-            Err(err) => warn!("Generate pixel failed: {err}"),
         }
     }
 }
