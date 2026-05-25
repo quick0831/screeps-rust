@@ -8,7 +8,7 @@ use screeps::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::SharedData;
-use crate::path_away::path_away_from;
+use crate::path_finder::path_away_from;
 use crate::roles::RoleTrait;
 use crate::transport_alloc::EnergyStore;
 use crate::transport_alloc::EnergyStoreId;

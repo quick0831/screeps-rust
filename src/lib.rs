@@ -18,7 +18,7 @@ use wasm_bindgen::prelude::*;
 
 mod logging;
 mod memory;
-mod path_away;
+mod path_finder;
 mod roles;
 mod source_alloc;
 mod spawn;
