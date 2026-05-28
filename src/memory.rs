@@ -31,8 +31,6 @@ pub fn cleanup_memory() {
     // convert from JsValue to Object
     let memory_creeps: Object = memory_creeps.unchecked_into();
 
-    info!("DEBUG: {}", Object::keys(&memory_creeps).iter().count());
-
     // iterate memory creeps
     for creep_name_js in Object::keys(&memory_creeps).iter() {
         let creep_name = creep_name_js.as_string().unwrap();
