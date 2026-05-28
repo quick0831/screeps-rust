@@ -7,6 +7,7 @@ use screeps::find;
 use screeps::prelude::*;
 use serde::{Deserialize, Serialize};
 
+use crate::RoomMemory;
 use crate::SharedData;
 use crate::path_finder::path_away_from;
 use crate::roles::RoleTrait;
@@ -22,7 +23,7 @@ pub struct Upgrader {
 impl RoleTrait for Upgrader {
     fn register(&self, _creep: &Creep, _d: &mut SharedData) {}
 
-    fn run(&mut self, creep: &Creep, d: &SharedData) {
+    fn run(&mut self, creep: &Creep, d: &SharedData, _room_memory: &mut RoomMemory) {
         if creep.store().get(ResourceType::Energy).unwrap_or(0) == 0 {
             self.upgrading = false;
             let energy_avail = d.room.energy_available();

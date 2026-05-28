@@ -12,12 +12,15 @@ use screeps::TextStyle;
 use screeps::find;
 use screeps::game;
 use screeps::prelude::*;
+use serde::Deserialize;
+use serde::Serialize;
 use serde_wasm_bindgen::{from_value, to_value};
 use strum::IntoDiscriminant as _;
 use wasm_bindgen::prelude::*;
 
 mod logging;
 mod memory;
+mod metric;
 mod path_finder;
 mod roles;
 mod source_alloc;
@@ -27,6 +30,7 @@ mod transport_alloc;
 mod utils;
 
 use crate::memory::cleanup_memory;
+use crate::metric::Metric;
 use crate::roles::*;
 use crate::source_alloc::SourceAllocator;
 use crate::spawn::process_spawning;
@@ -34,6 +38,12 @@ use crate::transport_alloc::EnergyStore;
 use crate::transport_alloc::TransportAllocator;
 
 static INIT_LOGGING: std::sync::Once = std::sync::Once::new();
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
+struct RoomMemory {
+    energy_rate: Metric,
+}
 
 struct SharedData {
     spawn: StructureSpawn,
@@ -99,6 +109,7 @@ pub fn game_loop() {
 }
 
 fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
+    let mut room_memory: RoomMemory = from_value(room.memory()).unwrap_or_default();
     let spawn = spawns[0].clone();
     let sources = room.find(find::SOURCES, None);
     let source_alloc = SourceAllocator::new(sources);
@@ -165,12 +176,18 @@ fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
 
     // Execute stage
     for (creep, mut memory) in creep_mems {
-        memory.run(&creep, &d);
+        memory.run(&creep, &d, &mut room_memory);
 
         creep.set_memory(&to_value(&memory).expect("Failed to serialize memory"));
     }
 
     process_spawning(&d);
+
+    room_memory.energy_rate.record_finish();
+    let stat_energy_rate = room_memory.energy_rate.calculate_output();
+
+    d.room
+        .set_memory(&to_value(&room_memory).expect("Failed to serialize Room memory"));
 
     let controller = d.room.controller().unwrap();
     let rcl = controller.level();
@@ -186,6 +203,7 @@ fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
         format!("Harvesters: {}", d.role_count.harvesters),
         format!("Upgraders: {}", d.role_count.upgraders),
         format!("Builders: {}", d.role_count.builders),
+        format!("Energy rate: {:.3}", stat_energy_rate),
     ];
 
     let style = TextStyle::default().align(TextAlign::Left);

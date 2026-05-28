@@ -7,6 +7,7 @@ use screeps::find;
 use screeps::prelude::*;
 use serde::{Deserialize, Serialize};
 
+use crate::RoomMemory;
 use crate::SharedData;
 use crate::path_finder::path_away_from;
 use crate::roles::RoleTrait;
@@ -28,7 +29,7 @@ impl RoleTrait for Hauler {
         }
     }
 
-    fn run(&mut self, creep: &Creep, d: &SharedData) {
+    fn run(&mut self, creep: &Creep, d: &SharedData, _room_memory: &mut RoomMemory) {
         if !self.carrying {
             self.target = d.transport_alloc.delegate(creep).or(self.target);
         }

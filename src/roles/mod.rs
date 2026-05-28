@@ -3,7 +3,7 @@ use screeps::Creep;
 use serde::{Deserialize, Serialize};
 use strum::EnumDiscriminants;
 
-use crate::SharedData;
+use crate::{RoomMemory, SharedData};
 
 mod builder;
 mod harvester;
@@ -18,7 +18,7 @@ pub use upgrader::Upgrader;
 #[enum_dispatch]
 pub trait RoleTrait {
     fn register(&self, creep: &Creep, d: &mut SharedData);
-    fn run(&mut self, creep: &Creep, d: &SharedData);
+    fn run(&mut self, creep: &Creep, d: &SharedData, room_memory: &mut RoomMemory);
 }
 
 #[enum_dispatch(RoleTrait)]

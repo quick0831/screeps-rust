@@ -11,6 +11,7 @@ use screeps::find;
 use screeps::prelude::*;
 use serde::{Deserialize, Serialize};
 
+use crate::RoomMemory;
 use crate::SharedData;
 use crate::roles::RoleTrait;
 use crate::transport_alloc::EnergyStore;
@@ -22,6 +23,7 @@ pub struct Harvester {
     container: Option<ObjectId<StructureContainer>>,
     target: Option<ObjectId<Source>>,
     state: HarvesterState,
+    record_haravest: Option<u32>,
 }
 
 #[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -44,12 +46,19 @@ impl RoleTrait for Harvester {
         }
     }
 
-    fn run(&mut self, creep: &Creep, d: &SharedData) {
+    fn run(&mut self, creep: &Creep, d: &SharedData, room_memory: &mut RoomMemory) {
         self.target = d.source_alloc.delegate(creep).or(self.target);
         let Some(target) = self.target else { return };
         let Some(target) = target.resolve() else {
             return;
         };
+
+        if let Some(energy_before) = self.record_haravest.take() {
+            let energy_after = creep.store().get(ResourceType::Energy).unwrap_or(0);
+            room_memory
+                .energy_rate
+                .record_add(energy_before as i32 - energy_after as i32);
+        }
 
         if self.state == HarvesterState::Harvest && creep.store().get_free_capacity(None) == 0 {
             let container = d
@@ -103,6 +112,9 @@ impl RoleTrait for Harvester {
                 let err = creep.transfer(&container, ResourceType::Energy, None);
                 if let Err(TransferErrorCode::NotInRange) = err {
                     let _ = creep.move_to(&container);
+                } else if err.is_ok() {
+                    self.record_haravest =
+                        Some(creep.store().get(ResourceType::Energy).unwrap_or(0));
                 }
             }
             HarvesterState::WaitHauler => {}
