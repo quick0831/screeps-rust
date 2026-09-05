@@ -54,8 +54,8 @@ impl TransportAllocator {
     pub fn allocate(&mut self) {
         let being_served: HashSet<_> = self
             .haulers
-            .iter()
-            .filter_map(|(_, info)| info.target)
+            .values()
+            .filter_map(|info| info.target)
             .collect();
         let mut pending_serve: BinaryHeap<_> = self
             .providers
