@@ -24,7 +24,7 @@ pub fn process_spawning(d: &SharedData) {
 
     let spawn_creep = |body: &[Part], name: &str, mem: &Role| {
         let cost: u32 = body.iter().map(|p| p.cost()).sum();
-        if d.energy.available > cost {
+        if d.energy.available >= cost {
             let option = SpawnOptions::new().memory(to_value(mem).unwrap());
             if let Err(err) = d.spawn.spawn_creep_with_options(body, name, &option) {
                 error!("Spawning error: {err}");
@@ -82,4 +82,3 @@ pub fn process_spawning(d: &SharedData) {
         spawn_creep(&body, &name, &mem);
     }
 }
-
