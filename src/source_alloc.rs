@@ -22,7 +22,7 @@ struct Info {
 
 // required work part per source
 // 0.5 is a rough estimate of deposit time loss
-// ceil(3000 / 300 + 0.5) = 6
+// ceil(3000 / 300 / 2 + 0.5) = 6
 const SLOTS_PER_SOURCE: u8 = 6;
 
 impl SourceAllocator {
