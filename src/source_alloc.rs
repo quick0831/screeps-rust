@@ -35,17 +35,14 @@ impl SourceAllocator {
     }
 
     pub fn register_harvester(&mut self, creep: &Creep, target: Option<ObjectId<Source>>) {
-        if let Some(id) = creep.try_id() {
-            let info = Info {
-                target,
-                size: creep
-                    .body()
-                    .into_iter()
-                    .filter(|p| p.part() == Part::Work)
-                    .count() as u8,
-            };
-            self.creeps.insert(id, info);
-        }
+        let Some(id) = creep.try_id() else { return };
+        let size = creep
+            .body()
+            .into_iter()
+            .filter(|p| p.part() == Part::Work)
+            .count() as u8;
+        let info = Info { target, size };
+        self.creeps.insert(id, info);
     }
 
     pub fn allocate(&mut self) {
