@@ -144,16 +144,14 @@ fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
         .filter_map(|creep| from_value(creep.memory()).ok().map(|mem| (creep, mem)))
         .collect();
 
-    let roles: Vec<RoleType> = creep_mems
-        .iter()
-        .map(|(_, memory)| memory.discriminant())
-        .collect();
-
-    let num_roles = |role| roles.iter().filter(|c| **c == role).count();
-    d.role_count.haulers = num_roles(RoleType::Hauler);
-    d.role_count.harvesters = num_roles(RoleType::Harvester);
-    d.role_count.upgraders = num_roles(RoleType::Upgrader);
-    d.role_count.builders = num_roles(RoleType::Builder);
+    for (_, memory) in &creep_mems {
+        match memory.discriminant() {
+            RoleType::Hauler => d.role_count.haulers += 1,
+            RoleType::Harvester => d.role_count.harvesters += 1,
+            RoleType::Upgrader => d.role_count.upgraders += 1,
+            RoleType::Builder => d.role_count.builders += 1,
+        }
+    }
 
     // Register stage
     for (creep, memory) in &creep_mems {
