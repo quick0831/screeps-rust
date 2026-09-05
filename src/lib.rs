@@ -1,5 +1,3 @@
-use log::info;
-use log::warn;
 use screeps::Creep;
 use screeps::ResourceType;
 use screeps::Room;
@@ -17,6 +15,9 @@ use serde::Serialize;
 use serde_wasm_bindgen::{from_value, to_value};
 use strum::IntoDiscriminant as _;
 use wasm_bindgen::prelude::*;
+
+#[allow(unused_imports)]
+use log::{debug, error, info, trace, warn};
 
 mod logging;
 mod memory;
