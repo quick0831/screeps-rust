@@ -22,6 +22,13 @@ pub fn process_spawning(d: &SharedData) {
     let harvester_spawn_size = d.source_alloc.get_creep_spawn_size();
     let has_construction_sites = !d.room.find(find::CONSTRUCTION_SITES, None).is_empty();
 
+    let show_text = |text: String| {
+        let visual = d.room.visual();
+        let pos = d.spawn.pos();
+        let style = TextStyle::default().align(TextAlign::Left);
+        visual.text(pos.x().u8() as f32, pos.y().u8() as f32, text, Some(style));
+    };
+
     let spawn_creep = |body: &[Part], name: &str, mem: &Role| {
         let cost: u32 = body.iter().map(|p| p.cost()).sum();
         if d.energy.available >= cost {
@@ -32,7 +39,7 @@ pub fn process_spawning(d: &SharedData) {
                 info!("Spawning: {name}");
             }
         } else {
-            info!("Spawning: Not enough energy!");
+            show_text(format!("Need {}/{}", d.energy.available, cost));
         }
     };
 
@@ -42,11 +49,7 @@ pub fn process_spawning(d: &SharedData) {
             && let Ok(memory) = from_value::<Role>(creep.memory())
         {
             let role = memory.discriminant();
-            let pos = d.spawn.pos();
-            let text = format!("🛠️ {role}");
-            let style = TextStyle::default().align(TextAlign::Left);
-            let visual = d.room.visual();
-            visual.text(pos.x().u8() as f32, pos.y().u8() as f32, text, Some(style));
+            show_text(format!("🛠️ {role}"));
         }
     } else if d.role_count.haulers < 3 && d.role_count.harvesters >= 1 {
         let unit_part = [Part::Move, Part::Carry];
