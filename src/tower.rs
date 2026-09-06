@@ -3,12 +3,11 @@ use screeps::StructureType;
 use screeps::find;
 use screeps::prelude::*;
 
-use crate::utils::sort_unstable_by_distance;
-
 pub fn run(tower: StructureTower) {
     let room = tower.room().unwrap();
+    let center = tower.pos();
 
-    let mut damaged_structures = room
+    let nearest_damaged_structures = room
         .find(find::STRUCTURES, None)
         .into_iter()
         .filter(|s| {
@@ -21,14 +20,12 @@ pub fn run(tower: StructureTower) {
                 false
             }
         })
-        .collect::<Vec<_>>();
+        .min_by_key(|s| center.get_range_to(s.pos()));
 
-    damaged_structures = sort_unstable_by_distance(tower.pos(), damaged_structures);
-
-    if let Some(closest_damaged_structure) = damaged_structures.first()
-        && let Some(structure) = closest_damaged_structure.as_repairable()
+    if let Some(structure) = nearest_damaged_structures
+        && let Some(repairable) = structure.as_repairable()
     {
-        let _ = tower.repair(structure);
+        let _ = tower.repair(repairable);
     }
 
     if let Some(closest_hostile) = tower.pos().find_closest_by_range(find::HOSTILE_CREEPS) {

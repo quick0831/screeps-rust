@@ -13,7 +13,6 @@ use crate::path_finder::path_away_from;
 use crate::roles::RoleTrait;
 use crate::room::RoomMemory;
 use crate::room::SharedData;
-use crate::utils::sort_unstable_by_distance;
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
@@ -48,15 +47,19 @@ impl RoleTrait for Builder {
                     let _ = creep.move_to(target);
                 }
             } else {
-                let construction_sites = d.room.find(find::MY_CONSTRUCTION_SITES, None);
-                self.target = sort_unstable_by_distance(creep.pos(), construction_sites)
-                    .first()
+                let center = creep.pos();
+                self.target = d
+                    .room
+                    .find(find::MY_CONSTRUCTION_SITES, None)
+                    .into_iter()
+                    .min_by_key(|s| center.get_range_to(s.pos()))
                     .and_then(|site| site.try_id());
             }
         } else if self.fetch {
             // grab energy from spawn and extensions
             let structures = creep.room().unwrap().find(find::MY_STRUCTURES, None);
-            let mut targets = structures
+            let center = creep.pos();
+            let target = structures
                 .into_iter()
                 .filter(|s| {
                     matches!(
@@ -70,9 +73,8 @@ impl RoleTrait for Builder {
                         .unwrap_or(0)
                         > 0
                 })
-                .collect::<Vec<_>>();
-            targets = sort_unstable_by_distance(creep.pos(), targets);
-            if let Some(target) = targets.first()
+                .min_by_key(|s| center.get_range_to(s.pos()));
+            if let Some(target) = target
                 && let Some(withdrawable) = target.as_withdrawable()
             {
                 let err = creep.withdraw(withdrawable, ResourceType::Energy, None);

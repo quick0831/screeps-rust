@@ -16,7 +16,6 @@ use serde::{Deserialize, Serialize};
 use crate::roles::RoleTrait;
 use crate::room::RoomMemory;
 use crate::room::SharedData;
-use crate::utils::diagonal_distance;
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
@@ -46,6 +45,8 @@ impl RoleTrait for Harvester {
     }
 
     fn run(&mut self, creep: &Creep, d: &SharedData, room_memory: &mut RoomMemory) {
+        let pos = creep.pos();
+
         self.target = d.source_alloc.delegate(creep).or(self.target);
         let Some(target) = self.target else { return };
         let Some(target) = target.resolve() else {
@@ -68,7 +69,7 @@ impl RoleTrait for Harvester {
                     StructureObject::StructureContainer(c) => Some(c),
                     _ => None,
                 })
-                .filter(|c| diagonal_distance(creep.pos(), c.pos()) <= 2)
+                .filter(|c| pos.in_range_to(c.pos(), 2))
                 .find(|c| c.store().get_free_capacity(Some(ResourceType::Energy)) > 0);
 
             if let Some(container) = container {
@@ -84,7 +85,7 @@ impl RoleTrait for Harvester {
                     .room
                     .find(find::CONSTRUCTION_SITES, None)
                     .into_iter()
-                    .find(|c| creep.pos().in_range_to(c.pos(), 2))
+                    .find(|c| pos.in_range_to(c.pos(), 2))
                     .and_then(|c| c.try_id());
                 self.state = HarvesterState::Build;
             }

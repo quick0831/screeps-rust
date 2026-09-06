@@ -13,7 +13,6 @@ use crate::room::RoomMemory;
 use crate::room::SharedData;
 use crate::transport_alloc::EnergyStore;
 use crate::transport_alloc::EnergyStoreId;
-use crate::utils::sort_unstable_by_distance;
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
@@ -36,7 +35,8 @@ impl RoleTrait for Hauler {
 
         if self.carrying {
             let structures = creep.room().unwrap().find(find::MY_STRUCTURES, None);
-            let mut targets = structures
+            let center = creep.pos();
+            let target = structures
                 .into_iter()
                 .filter(|s| {
                     matches!(
@@ -49,9 +49,8 @@ impl RoleTrait for Hauler {
                         s.store().get_free_capacity(Some(ResourceType::Energy))
                     }) > 0
                 })
-                .collect::<Vec<_>>();
-            targets = sort_unstable_by_distance(creep.pos(), targets);
-            if let Some(target) = targets.first()
+                .min_by_key(|s| center.get_range_to(s.pos()));
+            if let Some(target) = target
                 && let Some(transferable) = target.as_transferable()
             {
                 let err = creep.transfer(transferable, ResourceType::Energy, None);
