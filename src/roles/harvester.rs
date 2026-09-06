@@ -1,9 +1,11 @@
+use screeps::ConstructionSite;
 use screeps::Creep;
 use screeps::ObjectId;
 use screeps::ResourceType;
 use screeps::Source;
 use screeps::StructureContainer;
 use screeps::StructureObject;
+use screeps::action_error_codes::BuildErrorCode;
 use screeps::action_error_codes::CreepRepairErrorCode;
 use screeps::action_error_codes::HarvestErrorCode;
 use screeps::action_error_codes::TransferErrorCode;
@@ -14,13 +16,13 @@ use serde::{Deserialize, Serialize};
 use crate::roles::RoleTrait;
 use crate::room::RoomMemory;
 use crate::room::SharedData;
-use crate::transport_alloc::EnergyStore;
 use crate::utils::diagonal_distance;
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Harvester {
     container: Option<ObjectId<StructureContainer>>,
+    construction_site: Option<ObjectId<ConstructionSite>>,
     target: Option<ObjectId<Source>>,
     state: HarvesterState,
     record_haravest: Option<u32>,
@@ -29,21 +31,18 @@ pub struct Harvester {
 #[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum HarvesterState {
-    #[default]
-    Harvest,
     Repair,
     Deposit,
-    WaitHauler,
+    Build,
     DepositSpawn,
+    #[default]
+    #[serde(other)]
+    Harvest,
 }
 
 impl RoleTrait for Harvester {
     fn register(&self, creep: &Creep, d: &mut SharedData) {
         d.source_alloc.register_harvester(creep, self.target);
-        if self.state == HarvesterState::WaitHauler {
-            d.transport_alloc
-                .file_request(EnergyStore::Creep(creep.clone()));
-        }
     }
 
     fn run(&mut self, creep: &Creep, d: &SharedData, room_memory: &mut RoomMemory) {
@@ -81,7 +80,13 @@ impl RoleTrait for Harvester {
                 }
             } else {
                 self.container = None;
-                self.state = HarvesterState::WaitHauler;
+                self.construction_site = d
+                    .room
+                    .find(find::CONSTRUCTION_SITES, None)
+                    .into_iter()
+                    .find(|c| creep.pos().in_range_to(c.pos(), 2))
+                    .and_then(|c| c.try_id());
+                self.state = HarvesterState::Build;
             }
         }
         if creep.store().get(ResourceType::Energy).unwrap_or(0) == 0 {
@@ -96,7 +101,7 @@ impl RoleTrait for Harvester {
             }
             HarvesterState::Repair => {
                 let Some(container) = self.container.and_then(|id| id.resolve()) else {
-                    self.state = HarvesterState::WaitHauler;
+                    self.state = HarvesterState::Build;
                     return;
                 };
                 let err = creep.repair(&container);
@@ -106,7 +111,7 @@ impl RoleTrait for Harvester {
             }
             HarvesterState::Deposit => {
                 let Some(container) = self.container.and_then(|id| id.resolve()) else {
-                    self.state = HarvesterState::WaitHauler;
+                    self.state = HarvesterState::Build;
                     return;
                 };
                 let err = creep.transfer(&container, ResourceType::Energy, None);
@@ -117,7 +122,16 @@ impl RoleTrait for Harvester {
                         Some(creep.store().get(ResourceType::Energy).unwrap_or(0));
                 }
             }
-            HarvesterState::WaitHauler => {}
+            HarvesterState::Build => {
+                let Some(site) = self.construction_site.and_then(|id| id.resolve()) else {
+                    self.state = HarvesterState::Harvest;
+                    return;
+                };
+                let err = creep.build(&site);
+                if let Err(BuildErrorCode::NotInRange) = err {
+                    let _ = creep.move_to(&site);
+                }
+            }
             HarvesterState::DepositSpawn => {
                 let err = creep.transfer(&d.spawn, ResourceType::Energy, None);
                 if let Err(TransferErrorCode::NotInRange) = err {
