@@ -26,10 +26,10 @@ struct Info {
 const SLOTS_PER_SOURCE: u8 = 6;
 
 impl SourceAllocator {
-    pub fn new(sources: Vec<Source>) -> Self {
+    pub fn new(sources: &[Source]) -> Self {
         SourceAllocator {
             creeps: BTreeMap::new(),
-            sources: sources.into_iter().map(|s| s.id()).collect(),
+            sources: sources.iter().map(|s| s.id()).collect(),
             creep_spawn_size: 0,
         }
     }

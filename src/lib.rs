@@ -1,6 +1,7 @@
 use screeps::Creep;
 use screeps::ResourceType;
 use screeps::Room;
+use screeps::Source;
 use screeps::StructureContainer;
 use screeps::StructureSpawn;
 use screeps::StructureTower;
@@ -19,6 +20,7 @@ use wasm_bindgen::prelude::*;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
 
+mod container;
 mod logging;
 mod memory;
 mod metric;
@@ -30,6 +32,7 @@ mod tower;
 mod transport_alloc;
 mod utils;
 
+use crate::container::put_containers;
 use crate::memory::cleanup_memory;
 use crate::metric::Metric;
 use crate::roles::*;
@@ -49,6 +52,7 @@ struct RoomMemory {
 struct SharedData {
     spawn: StructureSpawn,
     room: Room,
+    sources: Vec<Source>,
     source_alloc: SourceAllocator,
     transport_alloc: TransportAllocator,
     role_count: RoleCount,
@@ -113,7 +117,7 @@ fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
     let mut room_memory: RoomMemory = from_value(room.memory()).unwrap_or_default();
     let spawn = spawns[0].clone();
     let sources = room.find(find::SOURCES, None);
-    let source_alloc = SourceAllocator::new(sources);
+    let source_alloc = SourceAllocator::new(&sources);
     let transport_alloc = TransportAllocator::new();
     let role_count = RoleCount::default();
     let energy = EnergyStatus {
@@ -124,11 +128,14 @@ fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
     let mut d = SharedData {
         spawn,
         room,
+        sources,
         source_alloc,
         transport_alloc,
         role_count,
         energy,
     };
+
+    put_containers(&d);
 
     let towers = d
         .room
