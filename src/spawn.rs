@@ -74,11 +74,11 @@ pub fn process_spawning(d: &SharedData) {
         let name = format!("Builder{time}");
         let mem = Builder::default().into();
         spawn_creep(&body, &name, &mem);
-    } else if d.energy.capacity - d.energy.available < 100 {
+    } else if d.role_count.upgraders < 3 && d.energy.capacity - d.energy.available < 100 {
         let unit_part = [Part::Move, Part::Move, Part::Work, Part::Carry];
         let unit_cost: u32 = unit_part.map(Part::cost).into_iter().sum();
         let spawn_cap = (max(300, d.energy.capacity - 300) / unit_cost) as u8;
-        let spawn_size = min(6, spawn_cap) as usize;
+        let spawn_size = min(5, spawn_cap) as usize;
         let body = unit_part.repeat(spawn_size);
         let name = format!("Upgrader{time}");
         let mem = Upgrader::default().into();
