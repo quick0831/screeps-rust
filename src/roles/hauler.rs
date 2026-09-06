@@ -59,23 +59,26 @@ impl RoleTrait for Hauler {
                     let _ = creep.move_to(target.clone());
                 }
             }
-        } else if let Some(target) = self.target
-            && let Some(target) = target.resolve()
-        {
-            if let EnergyStore::Creep(target_creep) = target {
-                let err = target_creep.transfer(creep, ResourceType::Energy, None);
-                if let Err(TransferErrorCode::NotInRange) = err {
-                    let _ = creep.move_to(target_creep);
-                } else {
-                    self.target = None;
+        } else if let Some(target) = self.target {
+            if let Some(target) = target.resolve() {
+                if let EnergyStore::Creep(target_creep) = target {
+                    let err = target_creep.transfer(creep, ResourceType::Energy, None);
+                    if let Err(TransferErrorCode::NotInRange) = err {
+                        let _ = creep.move_to(target_creep);
+                    } else {
+                        self.target = None;
+                    }
+                } else if let Some(withdrawable) = target.as_withdrawable() {
+                    let err = creep.withdraw(&withdrawable, ResourceType::Energy, None);
+                    if let Err(WithdrawErrorCode::NotInRange) = err {
+                        let _ = creep.move_to(target.clone());
+                    } else {
+                        self.target = None;
+                    }
                 }
-            } else if let Some(withdrawable) = target.as_withdrawable() {
-                let err = creep.withdraw(&withdrawable, ResourceType::Energy, None);
-                if let Err(WithdrawErrorCode::NotInRange) = err {
-                    let _ = creep.move_to(target.clone());
-                } else {
-                    self.target = None;
-                }
+            } else {
+                // target failed to resolve, give up task
+                self.target = None;
             }
         } else {
             // move away from spawn
