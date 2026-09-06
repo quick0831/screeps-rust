@@ -1,48 +1,33 @@
 use log::warn;
 use screeps::RoomXY;
-use screeps::StructureContainer;
 use screeps::StructureType;
 use screeps::Terrain;
-use screeps::find;
 use screeps::look::LookResult;
 use screeps::prelude::*;
 
 use crate::SharedData;
 
 pub fn put_containers(d: &SharedData) {
-    let unbuilt_containers = d
-        .room
-        .find(find::CONSTRUCTION_SITES, None)
-        .into_iter()
-        .filter(|e| e.structure_type() == StructureType::Container)
-        .map(|e| e.pos());
-
-    let built_containers = d
-        .room
-        .find(find::STRUCTURES, None)
-        .into_iter()
-        .filter_map(|s| -> Option<StructureContainer> { s.try_into().ok() })
-        .map(|e| e.pos());
-
-    let containers: Vec<_> = unbuilt_containers.chain(built_containers).collect();
-
     for source in &d.sources {
-        let source_pos = source.pos();
+        let pos = source.pos().xy();
+        let x = pos.x.u8();
+        let y = pos.y.u8();
 
-        let has_container = containers
+        let area: Vec<_> = d.room.look_at_area(y - 1, x - 1, y + 1, x + 1);
+
+        let has_container = area
             .iter()
-            .find(|e| e.in_range_to(source_pos, 1))
+            .find(|p| match &p.look_result {
+                LookResult::Structure(s) => s.structure_type() == StructureType::Container,
+                LookResult::ConstructionSite(s) => s.structure_type() == StructureType::Container,
+                _ => false,
+            })
             .is_some();
 
         if !has_container {
             // Find a place to put container
-            let xy = source_pos.xy();
-            let x = xy.x.u8();
-            let y = xy.y.u8();
 
-            let area: Vec<_> = d
-                .room
-                .look_at_area(y - 1, x - 1, y + 1, x + 1)
+            let area: Vec<_> = area
                 .into_iter()
                 .filter(|p| {
                     matches!(
