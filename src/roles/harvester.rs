@@ -4,18 +4,17 @@ use screeps::ObjectId;
 use screeps::ResourceType;
 use screeps::Source;
 use screeps::StructureContainer;
-use screeps::StructureObject;
 use screeps::action_error_codes::BuildErrorCode;
 use screeps::action_error_codes::CreepRepairErrorCode;
 use screeps::action_error_codes::HarvestErrorCode;
 use screeps::action_error_codes::TransferErrorCode;
-use screeps::find;
 use screeps::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::roles::RoleTrait;
 use crate::room::RoomMemory;
 use crate::room::SharedData;
+use crate::source::ContainerInfo;
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
@@ -45,11 +44,9 @@ impl RoleTrait for Harvester {
     }
 
     fn run(&mut self, creep: &Creep, d: &SharedData, room_memory: &mut RoomMemory) {
-        let pos = creep.pos();
-
         self.target = d.source_alloc.delegate(creep).or(self.target);
-        let Some(target) = self.target else { return };
-        let Some(target) = target.resolve() else {
+        let Some(target_id) = self.target else { return };
+        let Some(target) = target_id.resolve() else {
             return;
         };
 
@@ -62,34 +59,32 @@ impl RoleTrait for Harvester {
 
         if self.state == HarvesterState::Harvest && creep.store().get_free_capacity(None) == 0 {
             let container = d
-                .room
-                .find(find::STRUCTURES, None)
-                .into_iter()
-                .filter_map(|s| match s {
-                    StructureObject::StructureContainer(c) => Some(c),
-                    _ => None,
-                })
-                .filter(|c| pos.in_range_to(c.pos(), 2))
-                .find(|c| c.store().get_free_capacity(Some(ResourceType::Energy)) > 0);
+                .sources
+                .iter()
+                .find(|s| s.source.id() == target_id)
+                .map(|s| s.container.clone())
+                .unwrap_or(ContainerInfo::None);
 
-            if let Some(container) = container {
-                self.container = Some(container.id());
-                if (container.hits() as f32 / container.hits_max() as f32) < 0.4 {
-                    self.state = HarvesterState::Repair;
-                } else {
-                    self.state = HarvesterState::Deposit;
+            match container {
+                ContainerInfo::Built(container_id) => {
+                    if let Some(container) = container_id.resolve() {
+                        self.container = Some(container_id);
+                        if (container.hits() as f32 / container.hits_max() as f32) < 0.4 {
+                            self.state = HarvesterState::Repair;
+                        } else {
+                            self.state = HarvesterState::Deposit;
+                        }
+                    }
                 }
-            } else {
-                self.container = None;
-                self.construction_site = d
-                    .room
-                    .find(find::CONSTRUCTION_SITES, None)
-                    .into_iter()
-                    .find(|c| pos.in_range_to(c.pos(), 2))
-                    .and_then(|c| c.try_id());
-                self.state = HarvesterState::Build;
+                ContainerInfo::Constructing(site_id) => {
+                    self.container = None;
+                    self.construction_site = Some(site_id);
+                    self.state = HarvesterState::Build;
+                }
+                ContainerInfo::None => {}
             }
         }
+
         if creep.store().get(ResourceType::Energy).unwrap_or(0) == 0 {
             self.state = HarvesterState::Harvest;
         }

@@ -14,6 +14,7 @@ mod metric;
 mod path_finder;
 mod roles;
 mod room;
+mod source;
 mod source_alloc;
 mod spawn;
 mod tower;

@@ -1,7 +1,6 @@
 use screeps::Creep;
 use screeps::ResourceType;
 use screeps::Room;
-use screeps::Source;
 use screeps::StructureContainer;
 use screeps::StructureSpawn;
 use screeps::StructureTower;
@@ -20,6 +19,8 @@ use strum::IntoDiscriminant as _;
 use crate::container::put_containers;
 use crate::metric::Metric;
 use crate::roles::*;
+use crate::source::SourceInfo;
+use crate::source::ananlyze_source;
 use crate::source_alloc::SourceAllocator;
 use crate::spawn::process_spawning;
 use crate::tower;
@@ -35,7 +36,7 @@ pub struct RoomMemory {
 pub struct SharedData {
     pub spawn: StructureSpawn,
     pub room: Room,
-    pub sources: Vec<Source>,
+    pub sources: Vec<SourceInfo>,
     pub source_alloc: SourceAllocator,
     pub transport_alloc: TransportAllocator,
     pub role_count: RoleCount,
@@ -67,6 +68,11 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
         available: room.energy_available(),
         capacity: room.energy_capacity_available(),
     };
+
+    let sources = sources
+        .into_iter()
+        .map(|s| ananlyze_source(s, &room))
+        .collect();
 
     let mut d = SharedData {
         spawn,
