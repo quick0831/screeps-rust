@@ -7,10 +7,10 @@ use screeps::find;
 use screeps::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::RoomMemory;
-use crate::SharedData;
 use crate::path_finder::path_away_from;
 use crate::roles::RoleTrait;
+use crate::room::RoomMemory;
+use crate::room::SharedData;
 use crate::utils::sort_unstable_by_distance;
 
 #[derive(Debug, Default, Serialize, Deserialize)]

@@ -11,9 +11,9 @@ use screeps::find;
 use screeps::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::RoomMemory;
-use crate::SharedData;
 use crate::roles::RoleTrait;
+use crate::room::RoomMemory;
+use crate::room::SharedData;
 use crate::transport_alloc::EnergyStore;
 use crate::utils::diagonal_distance;
 

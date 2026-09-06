@@ -5,7 +5,7 @@ use screeps::Terrain;
 use screeps::look::LookResult;
 use screeps::prelude::*;
 
-use crate::SharedData;
+use crate::room::SharedData;
 
 pub fn put_containers(d: &SharedData) {
     for source in &d.sources {

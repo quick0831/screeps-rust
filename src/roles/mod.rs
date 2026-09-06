@@ -3,7 +3,8 @@ use screeps::Creep;
 use serde::{Deserialize, Serialize};
 use strum::EnumDiscriminants;
 
-use crate::{RoomMemory, SharedData};
+use crate::room::RoomMemory;
+use crate::room::SharedData;
 
 mod builder;
 mod harvester;

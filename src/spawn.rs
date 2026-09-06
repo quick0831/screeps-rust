@@ -14,8 +14,8 @@ use serde_wasm_bindgen::from_value;
 use serde_wasm_bindgen::to_value;
 use strum::IntoDiscriminant as _;
 
-use crate::SharedData;
 use crate::roles::*;
+use crate::room::SharedData;
 
 pub fn process_spawning(d: &SharedData) {
     let time = game::time();
