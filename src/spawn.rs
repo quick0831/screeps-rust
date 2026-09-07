@@ -16,6 +16,7 @@ use strum::IntoDiscriminant as _;
 
 use crate::roles::*;
 use crate::room::SharedData;
+use crate::source::ContainerInfo;
 
 pub fn process_spawning(d: &SharedData) {
     let time = game::time();
@@ -43,6 +44,12 @@ pub fn process_spawning(d: &SharedData) {
         }
     };
 
+    let has_container = d
+        .sources
+        .iter()
+        .find(|s| matches!(s.container, ContainerInfo::Built(_)))
+        .is_some();
+
     if let Some(spawning) = d.spawn.spawning() {
         if let Some(name) = spawning.name().as_string()
             && let Some(creep) = game::creeps().get(name)
@@ -51,7 +58,7 @@ pub fn process_spawning(d: &SharedData) {
             let role = memory.discriminant();
             show_text(format!("🛠️ {role}"));
         }
-    } else if d.role_count.haulers < 3 && d.role_count.harvesters >= 1 {
+    } else if has_container && d.role_count.haulers < 3 {
         let unit_part = [Part::Move, Part::Carry];
         let unit_cost: u32 = unit_part.map(Part::cost).into_iter().sum();
         let spawn_cap = (max(300, d.energy.capacity - 300) / unit_cost) as u8;
