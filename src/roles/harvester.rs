@@ -23,7 +23,7 @@ pub struct Harvester {
     construction_site: Option<ObjectId<ConstructionSite>>,
     target: Option<ObjectId<Source>>,
     state: HarvesterState,
-    record_haravest: Option<u32>,
+    record_harvest: Option<u32>,
 }
 
 #[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -50,11 +50,11 @@ impl RoleTrait for Harvester {
             return;
         };
 
-        if let Some(energy_before) = self.record_haravest.take() {
+        if let Some(energy_before) = self.record_harvest.take() {
             let energy_after = creep.store().get(ResourceType::Energy).unwrap_or(0);
             room_memory
                 .energy_rate
-                .record_add(energy_before as i32 - energy_after as i32);
+                .record_add(energy_after as i32 - energy_before as i32);
         }
 
         if self.state == HarvesterState::Harvest && creep.store().get_free_capacity(None) == 0 {
@@ -91,8 +91,12 @@ impl RoleTrait for Harvester {
 
         match self.state {
             HarvesterState::Harvest => {
-                if let Err(HarvestErrorCode::NotInRange) = creep.harvest(&target) {
+                let err = creep.harvest(&target);
+                if let Err(HarvestErrorCode::NotInRange) = err {
                     let _ = creep.move_to(&target);
+                } else if err.is_ok() {
+                    self.record_harvest =
+                        Some(creep.store().get(ResourceType::Energy).unwrap_or(0));
                 }
             }
             HarvesterState::Repair => {
@@ -113,9 +117,6 @@ impl RoleTrait for Harvester {
                 let err = creep.transfer(&container, ResourceType::Energy, None);
                 if let Err(TransferErrorCode::NotInRange) = err {
                     let _ = creep.move_to(&container);
-                } else if err.is_ok() {
-                    self.record_haravest =
-                        Some(creep.store().get(ResourceType::Energy).unwrap_or(0));
                 }
             }
             HarvesterState::Build => {
