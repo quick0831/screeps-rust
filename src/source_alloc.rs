@@ -7,10 +7,12 @@ use screeps::Part;
 use screeps::Source;
 use screeps::prelude::*;
 
+use crate::source::SourceInfo;
+
 #[derive(Debug)]
 pub struct SourceAllocator {
     creeps: BTreeMap<ObjectId<Creep>, Info>,
-    sources: Vec<ObjectId<Source>>,
+    sources: Vec<SourceBasicInfo>,
     creep_spawn_size: u8,
 }
 
@@ -20,16 +22,32 @@ struct Info {
     size: u8,
 }
 
+#[derive(Debug, Clone)]
+struct SourceBasicInfo {
+    id: ObjectId<Source>,
+    site: u8,
+    alloced_site: u8,
+    alloced_size: u8,
+}
+
 // required work part per source
 // 0.5 is a rough estimate of deposit time loss
 // ceil(3000 / 300 / 2 + 0.5) = 6
 const SLOTS_PER_SOURCE: u8 = 6;
 
 impl SourceAllocator {
-    pub fn new(sources: &[Source]) -> Self {
+    pub fn new(sources: &[SourceInfo]) -> Self {
         SourceAllocator {
             creeps: BTreeMap::new(),
-            sources: sources.iter().map(|s| s.id()).collect(),
+            sources: sources
+                .iter()
+                .map(|s| SourceBasicInfo {
+                    id: s.source.id(),
+                    site: s.nearby_area.len() as u8,
+                    alloced_site: 0,
+                    alloced_size: 0,
+                })
+                .collect(),
             creep_spawn_size: 0,
         }
     }
@@ -50,12 +68,12 @@ impl SourceAllocator {
             return;
         }
 
-        let mut allocs: Vec<(_, u8)> = self.sources.iter().cloned().map(|s| (s, 0)).collect();
         for info in self.creeps.values() {
             if let Some(target) = &info.target
-                && let Some(e) = allocs.iter_mut().find(|(s, _)| *s == *target)
+                && let Some(e) = self.sources.iter_mut().find(|s| s.id == *target)
             {
-                e.1 += info.size;
+                e.alloced_site += 1;
+                e.alloced_size += info.size;
             }
         }
 
@@ -68,13 +86,18 @@ impl SourceAllocator {
         unbound.sort_unstable_by_key(|(_, size)| *size);
 
         for (creep, size) in unbound.into_iter().rev() {
-            allocs.sort_unstable_by_key(|(_, slot)| *slot);
-            let (source_id, alloc) = allocs[0];
-            if alloc >= SLOTS_PER_SOURCE {
+            let source_info = self
+                .sources
+                .iter_mut()
+                .filter(|s| s.alloced_size < SLOTS_PER_SOURCE)
+                .filter(|s| s.alloced_site < s.site)
+                .min_by_key(|s| s.alloced_size);
+            let Some(source_info) = source_info else {
                 break;
-            }
-            self.creeps.get_mut(&creep).unwrap().target = Some(source_id);
-            allocs[0].1 += size;
+            };
+            self.creeps.get_mut(&creep).unwrap().target = Some(source_info.id);
+            source_info.alloced_site += 1;
+            source_info.alloced_size += size;
         }
 
         let max_creep_size = self
@@ -84,8 +107,12 @@ impl SourceAllocator {
             .max()
             .unwrap_or(0);
 
-        allocs.sort_unstable_by_key(|(_, slot)| *slot);
-        let spawn_size = SLOTS_PER_SOURCE.saturating_sub(allocs[0].1);
+        let spawn_need = self.sources.iter().map(|s| s.alloced_size).min();
+        let spawn_size = if let Some(n) = spawn_need {
+            SLOTS_PER_SOURCE.saturating_sub(n)
+        } else {
+            0
+        };
 
         self.creep_spawn_size = min(spawn_size, max_creep_size + 1);
     }

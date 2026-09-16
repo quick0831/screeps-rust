@@ -60,7 +60,11 @@ pub struct EnergyStatus {
 pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
     let mut room_memory: RoomMemory = from_value(room.memory()).unwrap_or_default();
     let spawn = spawns[0].clone();
-    let sources = room.find(find::SOURCES, None);
+    let sources: Vec<_> = room
+        .find(find::SOURCES, None)
+        .into_iter()
+        .map(|s| ananlyze_source(s, &room))
+        .collect();
     let source_alloc = SourceAllocator::new(&sources);
     let transport_alloc = TransportAllocator::new();
     let role_count = RoleCount::default();
@@ -68,11 +72,6 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
         available: room.energy_available(),
         capacity: room.energy_capacity_available(),
     };
-
-    let sources = sources
-        .into_iter()
-        .map(|s| ananlyze_source(s, &room))
-        .collect();
 
     let mut d = SharedData {
         spawn,
