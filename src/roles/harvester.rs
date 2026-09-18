@@ -42,7 +42,7 @@ impl RoleTrait for Harvester {
         d.source_alloc.register_harvester(creep, self.target);
     }
 
-    fn run(&mut self, creep: &Creep, d: &SharedData, room_memory: &mut RoomMemory) {
+    fn run(&mut self, creep: &Creep, d: &mut SharedData, room_memory: &mut RoomMemory) {
         self.target = d.source_alloc.delegate(creep).or(self.target);
         let Some(target_id) = self.target else { return };
         let Some(target) = target_id.resolve() else {
@@ -82,7 +82,7 @@ impl RoleTrait for Harvester {
                             self.state = HarvesterState::Stall;
                         }
                         if let Err(TransferErrorCode::NotInRange) = err {
-                            let _ = creep.move_to(&container);
+                            d.path_finder.move_to(creep, &container, 1);
                         }
                     }
                 }
@@ -103,7 +103,7 @@ impl RoleTrait for Harvester {
             HarvesterState::Harvest => {
                 let err = creep.harvest(&target);
                 if let Err(HarvestErrorCode::NotInRange) = err {
-                    let _ = creep.move_to(&target);
+                    d.path_finder.move_to(creep, &target, 1);
                 } else if err.is_ok() {
                     self.record_harvest =
                         Some(creep.store().get(ResourceType::Energy).unwrap_or(0));
@@ -116,7 +116,7 @@ impl RoleTrait for Harvester {
                 };
                 let err = creep.repair(&container);
                 if let Err(CreepRepairErrorCode::NotInRange) = err {
-                    let _ = creep.move_to(&container);
+                    d.path_finder.move_to(creep, &container, 3);
                 }
             }
             HarvesterState::Build => {
@@ -126,7 +126,7 @@ impl RoleTrait for Harvester {
                 };
                 let err = creep.build(&site);
                 if let Err(BuildErrorCode::NotInRange) = err {
-                    let _ = creep.move_to(&site);
+                    d.path_finder.move_to(creep, &site, 3);
                 }
             }
             HarvesterState::Stall => {}

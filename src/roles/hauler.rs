@@ -7,7 +7,6 @@ use screeps::find;
 use screeps::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::path_finder::path_away_from;
 use crate::roles::RoleTrait;
 use crate::room::RoomMemory;
 use crate::room::SharedData;
@@ -28,7 +27,7 @@ impl RoleTrait for Hauler {
         }
     }
 
-    fn run(&mut self, creep: &Creep, d: &SharedData, _room_memory: &mut RoomMemory) {
+    fn run(&mut self, creep: &Creep, d: &mut SharedData, _room_memory: &mut RoomMemory) {
         if !self.carrying {
             self.target = d.transport_alloc.delegate(creep).or(self.target);
         }
@@ -55,7 +54,7 @@ impl RoleTrait for Hauler {
             {
                 let err = creep.transfer(transferable, ResourceType::Energy, None);
                 if let Err(TransferErrorCode::NotInRange) = err {
-                    let _ = creep.move_to(target.clone());
+                    d.path_finder.move_to(creep, target.pos(), 1);
                 }
             }
         } else if let Some(target) = self.target {
@@ -63,14 +62,14 @@ impl RoleTrait for Hauler {
                 if let EnergyStore::Creep(target_creep) = target {
                     let err = target_creep.transfer(creep, ResourceType::Energy, None);
                     if let Err(TransferErrorCode::NotInRange) = err {
-                        let _ = creep.move_to(target_creep);
+                        d.path_finder.move_to(creep, &target_creep, 1);
                     } else {
                         self.target = None;
                     }
                 } else if let Some(withdrawable) = target.as_withdrawable() {
                     let err = creep.withdraw(&withdrawable, ResourceType::Energy, None);
                     if let Err(WithdrawErrorCode::NotInRange) = err {
-                        let _ = creep.move_to(target.clone());
+                        d.path_finder.move_to(creep, target.pos(), 1);
                     } else {
                         self.target = None;
                     }
@@ -80,8 +79,7 @@ impl RoleTrait for Hauler {
                 self.target = None;
             }
         } else {
-            // move away from spawn
-            let _ = path_away_from(creep, d.spawn.pos(), 7);
+            d.path_finder.move_away_from(creep, &d.spawn, 7);
         }
 
         if creep.store().get_free_capacity(None) == 0 {

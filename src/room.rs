@@ -18,6 +18,7 @@ use strum::IntoDiscriminant as _;
 
 use crate::container::put_containers;
 use crate::metric::Metric;
+use crate::path_finder::PathFinder;
 use crate::roles::*;
 use crate::source::SourceInfo;
 use crate::source::ananlyze_source;
@@ -41,6 +42,7 @@ pub struct SharedData {
     pub transport_alloc: TransportAllocator,
     pub role_count: RoleCount,
     pub energy: EnergyStatus,
+    pub path_finder: PathFinder,
 }
 
 #[derive(Debug, Default)]
@@ -73,6 +75,13 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
         capacity: room.energy_capacity_available(),
     };
 
+    let creep_mems: Vec<(Creep, Role)> = game::creeps()
+        .values()
+        .filter_map(|creep| from_value(creep.memory()).ok().map(|mem| (creep, mem)))
+        .collect();
+
+    let path_finder = PathFinder::new(creep_mems.iter().map(|(creep, _)| creep));
+
     let mut d = SharedData {
         spawn,
         room,
@@ -81,6 +90,7 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
         transport_alloc,
         role_count,
         energy,
+        path_finder,
     };
 
     put_containers(&d);
@@ -93,11 +103,6 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
     for tower in towers {
         tower::run(tower);
     }
-
-    let creep_mems: Vec<(Creep, Role)> = game::creeps()
-        .values()
-        .filter_map(|creep| from_value(creep.memory()).ok().map(|mem| (creep, mem)))
-        .collect();
 
     for (_, memory) in &creep_mems {
         match memory.discriminant() {
@@ -130,10 +135,12 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
 
     // Execute stage
     for (creep, mut memory) in creep_mems {
-        memory.run(&creep, &d, &mut room_memory);
+        memory.run(&creep, &mut d, &mut room_memory);
 
         creep.set_memory(&to_value(&memory).expect("Failed to serialize memory"));
     }
+
+    d.path_finder.process_movements();
 
     process_spawning(&d);
 

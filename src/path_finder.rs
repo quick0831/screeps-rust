@@ -1,8 +1,10 @@
+use std::collections::BTreeMap;
+
 use screeps::CostMatrix;
 use screeps::Creep;
+use screeps::ObjectId;
 use screeps::Position;
 use screeps::RoomName;
-use screeps::action_error_codes::CreepMoveByPathErrorCode;
 use screeps::find;
 use screeps::game;
 use screeps::pathfinder::MultiRoomCostResult;
@@ -12,35 +14,114 @@ use screeps::prelude::*;
 
 const COST_UNWALKABLE: u8 = 255;
 
-// TODO: cache the result when queried on the same tick
-fn get_costmatrix(room_name: RoomName) -> MultiRoomCostResult {
-    let Some(room) = game::rooms().get(room_name) else {
-        return MultiRoomCostResult::Default;
-    };
-
-    let cost_matrix = CostMatrix::new();
-
-    let creep_pos = room.find(find::CREEPS, None).into_iter().map(|c| c.pos());
-    let structure_pos = room
-        .find(find::MY_STRUCTURES, None)
-        .into_iter()
-        .map(|s| s.pos());
-    for pos in creep_pos.chain(structure_pos) {
-        let (x, y) = pos.coords();
-        cost_matrix.set(x, y, COST_UNWALKABLE);
-    }
-    MultiRoomCostResult::CostMatrix(cost_matrix)
+pub struct PathFinder {
+    creeps: BTreeMap<ObjectId<Creep>, (PathType, Position)>,
 }
 
-pub fn path_away_from(
-    creep: &Creep,
-    target: Position,
-    range: u32,
-) -> Result<(), CreepMoveByPathErrorCode> {
-    let options = SearchOptions::new(get_costmatrix)
-        .flee(true)
-        .max_rooms(1)
-        .max_ops(100);
-    let result = search(creep.pos(), target, range, Some(options));
-    creep.move_by_path(&result.opaque_path())
+enum PathType {
+    NoTarget,
+    MoveTo(Position, u32),
+    MoveAway(Position, u32),
+}
+
+impl PathFinder {
+    pub fn new<'a>(creeps_iter: impl IntoIterator<Item = &'a Creep>) -> Self {
+        let mut creeps = BTreeMap::new();
+        for creep in creeps_iter {
+            let Some(id) = creep.try_id() else {
+                continue;
+            };
+            creeps.insert(id, (PathType::NoTarget, creep.pos()));
+        }
+
+        Self { creeps }
+    }
+
+    /// Note:
+    /// If the target is not walkable, set the range to at least 1 to avoid wasting CPU
+    pub fn move_to(&mut self, creep: &Creep, target: impl HasPosition, range: u32) {
+        let id = creep.try_id();
+        let Some(id) = id else { return };
+        let r = self.creeps.get_mut(&id);
+        let Some(r) = r else { return };
+        r.0 = PathType::MoveTo(target.pos(), range);
+    }
+
+    pub fn move_away_from(&mut self, creep: &Creep, target: impl HasPosition, range: u32) {
+        let id = creep.try_id();
+        let Some(id) = id else { return };
+        let r = self.creeps.get_mut(&id);
+        let Some(r) = r else { return };
+        r.0 = PathType::MoveAway(target.pos(), range);
+    }
+
+    pub fn process_movements(&self) {
+        let stasis_creeps: Vec<_> = self
+            .creeps
+            .iter()
+            .filter(|(_, (p, _))| matches!(p, PathType::NoTarget))
+            .map(|(_, (_, p))| p)
+            .cloned()
+            .collect();
+
+        let all_rooms = game::rooms();
+        let mut cache: BTreeMap<RoomName, MultiRoomCostResult> = BTreeMap::new();
+
+        let mut get_costmatrix = move |room_name: RoomName| {
+            if let Some(cache_result) = cache.get(&room_name) {
+                return clone_result(cache_result);
+            }
+
+            let Some(room) = all_rooms.get(room_name) else {
+                cache.insert(room_name, MultiRoomCostResult::Default);
+                return MultiRoomCostResult::Default;
+            };
+
+            let cost_matrix = CostMatrix::new();
+
+            let structure_pos = room
+                .find(find::MY_STRUCTURES, None)
+                .into_iter()
+                .map(|s| s.pos());
+            for pos in stasis_creeps.iter().cloned().chain(structure_pos) {
+                let (x, y) = pos.coords();
+                cost_matrix.set(x, y, COST_UNWALKABLE);
+            }
+            let result = MultiRoomCostResult::CostMatrix(cost_matrix);
+            cache.insert(room_name, clone_result(&result));
+            result
+        };
+
+        for (id, (target, pos)) in self.creeps.iter() {
+            let result = match target {
+                PathType::MoveTo(target, range) => {
+                    let options = SearchOptions::new(&mut get_costmatrix)
+                        .flee(false)
+                        .max_rooms(1)
+                        .max_ops(100);
+                    search(*pos, *target, *range, Some(options))
+                }
+                PathType::MoveAway(target, range) => {
+                    let options = SearchOptions::new(&mut get_costmatrix)
+                        .flee(true)
+                        .max_rooms(1)
+                        .max_ops(100);
+                    search(*pos, *target, *range, Some(options))
+                }
+                PathType::NoTarget => continue,
+            };
+            let creep = id.resolve();
+            let Some(creep) = creep else { continue };
+            let _ = creep.move_by_path(&result.opaque_path());
+        }
+    }
+}
+
+/// manually cloning the result because `MultiRoomCostResult` is somehow not `Clone`
+fn clone_result(input: &MultiRoomCostResult) -> MultiRoomCostResult {
+    match input {
+        MultiRoomCostResult::CostMatrix(cm) => MultiRoomCostResult::CostMatrix(cm.clone()),
+        MultiRoomCostResult::Impassable => MultiRoomCostResult::Impassable,
+        MultiRoomCostResult::Default => MultiRoomCostResult::Default,
+    }
 }

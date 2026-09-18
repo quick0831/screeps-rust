@@ -9,7 +9,6 @@ use screeps::find;
 use screeps::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::path_finder::path_away_from;
 use crate::roles::RoleTrait;
 use crate::room::RoomMemory;
 use crate::room::SharedData;
@@ -24,7 +23,7 @@ pub struct Builder {
 impl RoleTrait for Builder {
     fn register(&self, _creep: &Creep, _d: &mut SharedData) {}
 
-    fn run(&mut self, creep: &Creep, d: &SharedData, _room_memory: &mut RoomMemory) {
+    fn run(&mut self, creep: &Creep, d: &mut SharedData, _room_memory: &mut RoomMemory) {
         if creep.store().get(ResourceType::Energy).unwrap_or(0) == 0 {
             self.building = false;
             let energy_avail = d.room.energy_available();
@@ -44,7 +43,7 @@ impl RoleTrait for Builder {
                 && let Some(target) = target.resolve()
             {
                 if let Err(BuildErrorCode::NotInRange) = creep.build(&target) {
-                    let _ = creep.move_to(target);
+                    d.path_finder.move_to(creep, target.pos(), 3);
                 }
             } else {
                 let center = creep.pos();
@@ -79,12 +78,11 @@ impl RoleTrait for Builder {
             {
                 let err = creep.withdraw(withdrawable, ResourceType::Energy, None);
                 if let Err(WithdrawErrorCode::NotInRange) = err {
-                    let _ = creep.move_to(target.clone());
+                    d.path_finder.move_to(creep, target.pos(), 1);
                 }
             }
         } else {
-            // move away from spawn
-            let _ = path_away_from(creep, d.spawn.pos(), 7);
+            d.path_finder.move_away_from(creep, &d.spawn, 7);
         }
     }
 }
