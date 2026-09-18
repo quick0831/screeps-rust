@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use screeps::CostMatrix;
 use screeps::Creep;
 use screeps::ObjectId;
+use screeps::PolyStyle;
 use screeps::Position;
 use screeps::RoomName;
 use screeps::find;
@@ -100,6 +101,7 @@ impl PathFinder {
             result
         };
 
+        let mut idx = 0;
         for (id, (target, pos)) in self.creeps.iter() {
             let result = match target {
                 PathType::MoveTo(target, range) => {
@@ -118,6 +120,27 @@ impl PathFinder {
             let creep = id.resolve();
             let Some(creep) = creep else { continue };
             let _ = creep.move_by_path(&result.opaque_path());
+
+            if let Some(room) = creep.room() {
+                let visual = room.visual();
+
+                let offset = if idx % 2 == 0 { idx / 2 } else { -idx / 2 } as f32 * 0.05;
+                let points = Some(*pos)
+                    .into_iter()
+                    .chain(result.path())
+                    .map(|p| {
+                        let (x, y) = p.coords();
+                        (x as f32 + offset, y as f32 + offset)
+                    })
+                    .collect();
+                let style = PolyStyle::default()
+                    .opacity(0.7)
+                    .stroke("#ffffff")
+                    .stroke_width(0.02);
+                visual.poly(points, Some(style));
+            }
+
+            idx += 1;
         }
     }
 }
