@@ -130,7 +130,6 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
     }
 
     // Allocation stage
-    d.source_alloc.allocate();
     d.transport_alloc.allocate();
 
     // Execute stage

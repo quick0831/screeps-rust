@@ -1,10 +1,12 @@
 use screeps::ConstructionSite;
 use screeps::ObjectId;
 use screeps::Room;
+use screeps::RoomTerrain;
 use screeps::Source;
 use screeps::StructureContainer;
 use screeps::StructureObject;
 use screeps::StructureType;
+use screeps::Terrain;
 use screeps::look::LookResult;
 use screeps::look::PositionedLookResult;
 use screeps::prelude::*;
@@ -14,6 +16,7 @@ pub struct SourceInfo {
     pub source: Source,
     pub container: ContainerInfo,
     pub nearby_area: Vec<PositionedLookResult>,
+    pub site: u8,
 }
 
 #[derive(Debug, Clone)]
@@ -47,9 +50,24 @@ pub fn ananlyze_source(source: Source, room: &Room) -> SourceInfo {
         })
         .unwrap_or(ContainerInfo::None);
 
+    let mut site = 0;
+    if let Some(room_terrain) = RoomTerrain::new(room.name()) {
+        for x in (x - 1)..=(x + 1) {
+            for y in (y - 1)..=(y + 1) {
+                match room_terrain.get(x, y) {
+                    Terrain::Wall => {}
+                    _ => {
+                        site += 1;
+                    }
+                }
+            }
+        }
+    }
+
     SourceInfo {
         source,
         container,
         nearby_area,
+        site,
     }
 }

@@ -16,13 +16,16 @@ use crate::room::RoomMemory;
 use crate::room::SharedData;
 use crate::source::ContainerInfo;
 
-#[derive(Debug, Default, Serialize, Deserialize)]
-#[serde(default)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Harvester {
+    #[serde(default)]
     container: Option<ObjectId<StructureContainer>>,
+    #[serde(default)]
     construction_site: Option<ObjectId<ConstructionSite>>,
-    target: Option<ObjectId<Source>>,
+    target: ObjectId<Source>,
+    #[serde(default)]
     state: HarvesterState,
+    #[serde(default)]
     record_harvest: Option<u32>,
 }
 
@@ -37,15 +40,25 @@ enum HarvesterState {
     Harvest,
 }
 
+impl Harvester {
+    pub fn new(target: ObjectId<Source>) -> Self {
+        Self {
+            container: None,
+            construction_site: None,
+            target,
+            state: HarvesterState::default(),
+            record_harvest: None,
+        }
+    }
+}
+
 impl RoleTrait for Harvester {
     fn register(&self, creep: &Creep, d: &mut SharedData) {
         d.source_alloc.register_harvester(creep, self.target);
     }
 
     fn run(&mut self, creep: &Creep, d: &mut SharedData, room_memory: &mut RoomMemory) {
-        self.target = d.source_alloc.delegate(creep).or(self.target);
-        let Some(target_id) = self.target else { return };
-        let Some(target) = target_id.resolve() else {
+        let Some(target) = self.target.resolve() else {
             return;
         };
 
@@ -62,7 +75,7 @@ impl RoleTrait for Harvester {
             let container = d
                 .sources
                 .iter()
-                .find(|s| s.source.id() == target_id)
+                .find(|s| s.source.id() == self.target)
                 .map(|s| s.container.clone())
                 .unwrap_or(ContainerInfo::None);
 

@@ -20,7 +20,6 @@ use crate::source::ContainerInfo;
 
 pub fn process_spawning(d: &SharedData) {
     let time = game::time();
-    let harvester_spawn_size = d.source_alloc.get_creep_spawn_size();
     let has_construction_sites = !d.room.find(find::CONSTRUCTION_SITES, None).is_empty();
 
     let show_text = |text: String| {
@@ -67,14 +66,14 @@ pub fn process_spawning(d: &SharedData) {
         let name = format!("Hauler{time}");
         let mem = Hauler::default().into();
         spawn_creep(&body, &name, &mem);
-    } else if harvester_spawn_size != 0 {
+    } else if let Some((target, spawn_size)) = d.source_alloc.get_creep_spawn_info() {
         let unit_part = [Part::Move, Part::Work, Part::Carry];
         let unit_cost: u32 = unit_part.map(Part::cost).into_iter().sum();
         let spawn_cap = (max(300, d.energy.capacity - 300) / unit_cost) as u8;
-        let spawn_size = min(harvester_spawn_size, spawn_cap) as usize;
+        let spawn_size = min(spawn_size, spawn_cap) as usize;
         let body = unit_part.repeat(spawn_size);
         let name = format!("Harvester{time}");
-        let mem = Harvester::default().into();
+        let mem = Harvester::new(target).into();
         spawn_creep(&body, &name, &mem);
     } else if d.role_count.builders < 2 && has_construction_sites && d.role_count.upgraders != 0 {
         let body = vec![Part::Move, Part::Move, Part::Work, Part::Carry];
