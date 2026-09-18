@@ -58,11 +58,11 @@ pub fn process_spawning(d: &SharedData) {
             let role = memory.discriminant();
             show_text(format!("🛠️ {role}"));
         }
-    } else if has_container && d.role_count.haulers < 3 {
+    } else if has_container && d.role_count.haulers < 5 {
         let unit_part = [Part::Move, Part::Carry];
         let unit_cost: u32 = unit_part.map(Part::cost).into_iter().sum();
         let spawn_cap = (max(300, d.energy.capacity - 300) / unit_cost) as u8;
-        let spawn_size = min(6, spawn_cap) as usize;
+        let spawn_size = min(10, spawn_cap) as usize;
         let body = unit_part.repeat(spawn_size);
         let name = format!("Hauler{time}");
         let mem = Hauler::default().into();
