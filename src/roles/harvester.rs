@@ -30,9 +30,8 @@ pub struct Harvester {
 #[serde(rename_all = "snake_case")]
 enum HarvesterState {
     Repair,
-    Deposit,
     Build,
-    DepositSpawn,
+    Stall,
     #[default]
     #[serde(other)]
     Harvest,
@@ -57,7 +56,9 @@ impl RoleTrait for Harvester {
                 .record_add(energy_after as i32 - energy_before as i32);
         }
 
-        if self.state == HarvesterState::Harvest && creep.store().get_free_capacity(None) == 0 {
+        if self.state == HarvesterState::Stall
+            || self.state == HarvesterState::Harvest && creep.store().get_free_capacity(None) == 0
+        {
             let container = d
                 .sources
                 .iter()
@@ -67,12 +68,21 @@ impl RoleTrait for Harvester {
 
             match container {
                 ContainerInfo::Built(container_id) => {
-                    if let Some(container) = container_id.resolve() {
-                        self.container = Some(container_id);
-                        if (container.hits() as f32 / container.hits_max() as f32) < 0.4 {
-                            self.state = HarvesterState::Repair;
-                        } else {
-                            self.state = HarvesterState::Deposit;
+                    let Some(container) = container_id.resolve() else {
+                        return;
+                    };
+                    self.container = Some(container_id);
+                    if (container.hits() as f32 / container.hits_max() as f32) < 0.4 {
+                        self.state = HarvesterState::Repair;
+                    } else {
+                        // Deposit (because it can happen on the same tick as harvest)
+                        let err = creep.transfer(&container, ResourceType::Energy, None);
+                        if err.is_err() {
+                            // avoid dropping resource on the ground
+                            self.state = HarvesterState::Stall;
+                        }
+                        if let Err(TransferErrorCode::NotInRange) = err {
+                            let _ = creep.move_to(&container);
                         }
                     }
                 }
@@ -109,16 +119,6 @@ impl RoleTrait for Harvester {
                     let _ = creep.move_to(&container);
                 }
             }
-            HarvesterState::Deposit => {
-                let Some(container) = self.container.and_then(|id| id.resolve()) else {
-                    self.state = HarvesterState::Build;
-                    return;
-                };
-                let err = creep.transfer(&container, ResourceType::Energy, None);
-                if let Err(TransferErrorCode::NotInRange) = err {
-                    let _ = creep.move_to(&container);
-                }
-            }
             HarvesterState::Build => {
                 let Some(site) = self.construction_site.and_then(|id| id.resolve()) else {
                     self.state = HarvesterState::Harvest;
@@ -129,12 +129,7 @@ impl RoleTrait for Harvester {
                     let _ = creep.move_to(&site);
                 }
             }
-            HarvesterState::DepositSpawn => {
-                let err = creep.transfer(&d.spawn, ResourceType::Energy, None);
-                if let Err(TransferErrorCode::NotInRange) = err {
-                    let _ = creep.move_to(&d.spawn);
-                }
-            }
+            HarvesterState::Stall => {}
         }
     }
 }
