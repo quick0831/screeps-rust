@@ -89,10 +89,21 @@ impl PathFinder {
             let cost_matrix = CostMatrix::new();
 
             let structure_pos = room
-                .find(find::MY_STRUCTURES, None)
+                .find(find::STRUCTURES, None)
                 .into_iter()
+                .filter(|s| s.structure_type().is_obstacle())
                 .map(|s| s.pos());
-            for pos in stasis_creeps.iter().cloned().chain(structure_pos) {
+            let construction_site_pos = room
+                .find(find::CONSTRUCTION_SITES, None)
+                .into_iter()
+                .filter(|s| s.structure_type().is_obstacle())
+                .map(|s| s.pos());
+            for pos in stasis_creeps
+                .iter()
+                .cloned()
+                .chain(structure_pos)
+                .chain(construction_site_pos)
+            {
                 let (x, y) = pos.coords();
                 cost_matrix.set(x, y, COST_UNWALKABLE);
             }
