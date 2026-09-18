@@ -95,10 +95,7 @@ impl PathFinder {
         for (id, (target, pos)) in self.creeps.iter() {
             let result = match target {
                 PathType::MoveTo(target, range) => {
-                    let options = SearchOptions::new(&mut get_costmatrix)
-                        .flee(false)
-                        .max_rooms(1)
-                        .max_ops(100);
+                    let options = SearchOptions::new(&mut get_costmatrix).max_rooms(1);
                     search(*pos, *target, *range, Some(options))
                 }
                 PathType::MoveAway(target, range) => {
