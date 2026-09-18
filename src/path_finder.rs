@@ -40,19 +40,27 @@ impl PathFinder {
     /// Note:
     /// If the target is not walkable, set the range to at least 1 to avoid wasting CPU
     pub fn move_to(&mut self, creep: &Creep, target: impl HasPosition, range: u32) {
+        let target_pos = target.pos();
+        if creep.pos().get_range_to(target_pos) <= range {
+            return;
+        }
         let id = creep.try_id();
         let Some(id) = id else { return };
         let r = self.creeps.get_mut(&id);
         let Some(r) = r else { return };
-        r.0 = PathType::MoveTo(target.pos(), range);
+        r.0 = PathType::MoveTo(target_pos, range);
     }
 
     pub fn move_away_from(&mut self, creep: &Creep, target: impl HasPosition, range: u32) {
+        let target_pos = target.pos();
+        if creep.pos().get_range_to(target_pos) >= range {
+            return;
+        }
         let id = creep.try_id();
         let Some(id) = id else { return };
         let r = self.creeps.get_mut(&id);
         let Some(r) = r else { return };
-        r.0 = PathType::MoveAway(target.pos(), range);
+        r.0 = PathType::MoveAway(target_pos, range);
     }
 
     pub fn process_movements(&self) {
