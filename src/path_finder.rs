@@ -141,7 +141,7 @@ impl PathFinder {
                     .chain(result.path())
                     .map(|p| {
                         let (x, y) = p.coords();
-                        (x as f32 + offset, y as f32 + offset)
+                        (x as f32, y as f32 + offset)
                     })
                     .collect();
                 let style = PolyStyle::default()
