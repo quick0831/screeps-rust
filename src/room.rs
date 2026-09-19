@@ -61,7 +61,9 @@ pub struct EnergyStatus {
 
 pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
     let mut room_memory: RoomMemory = from_value(room.memory()).unwrap_or_default();
-    let spawn = spawns[0].clone();
+    let Some(spawn) = spawns.first().cloned() else {
+        return;
+    };
     let sources: Vec<_> = room
         .find(find::SOURCES, None)
         .into_iter()
