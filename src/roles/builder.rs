@@ -82,7 +82,7 @@ impl RoleTrait for Builder {
                 }
             }
         } else {
-            d.path_finder.move_away_from(creep, &d.spawn, 7);
+            d.path_finder.move_away_from(creep, &d.spawns[0], 7);
         }
     }
 }

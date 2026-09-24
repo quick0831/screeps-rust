@@ -35,7 +35,7 @@ pub struct RoomMemory {
 }
 
 pub struct SharedData {
-    pub spawn: StructureSpawn,
+    pub spawns: Vec<StructureSpawn>,
     pub room: Room,
     pub sources: Vec<SourceInfo>,
     pub source_alloc: SourceAllocator,
@@ -61,9 +61,9 @@ pub struct EnergyStatus {
 
 pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
     let mut room_memory: RoomMemory = from_value(room.memory()).unwrap_or_default();
-    let Some(spawn) = spawns.first().cloned() else {
+    if spawns.is_empty() {
         return;
-    };
+    }
     let sources: Vec<_> = room
         .find(find::SOURCES, None)
         .into_iter()
@@ -85,7 +85,7 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
     let path_finder = PathFinder::new(creep_mems.iter().map(|(creep, _)| creep));
 
     let mut d = SharedData {
-        spawn,
+        spawns,
         room,
         sources,
         source_alloc,
@@ -174,21 +174,23 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
         visual.text(0., (idx + 1) as f32, text, Some(style.clone()));
     }
 
-    let pos = d.spawn.pos();
-    let x = pos.x().u8();
-    let y = pos.y().u8();
-    for i in (x - 3)..=(x + 3) {
-        for j in (y - 3)..=(y + 3) {
-            let dist = i.abs_diff(x) + j.abs_diff(y);
-            if dist == 0 {
-                continue;
+    for spawn in &d.spawns {
+        let pos = spawn.pos();
+        let x = pos.x().u8();
+        let y = pos.y().u8();
+        for i in (x - 3)..=(x + 3) {
+            for j in (y - 3)..=(y + 3) {
+                let dist = i.abs_diff(x) + j.abs_diff(y);
+                if dist == 0 {
+                    continue;
+                }
+                let ty = if dist == 1 || (i + j + x + y).is_multiple_of(2) {
+                    StructureType::Road
+                } else {
+                    StructureType::Extension
+                };
+                let _ = d.room.create_construction_site(i, j, ty, None);
             }
-            let ty = if dist == 1 || (i + j + x + y).is_multiple_of(2) {
-                StructureType::Road
-            } else {
-                StructureType::Extension
-            };
-            let _ = d.room.create_construction_site(i, j, ty, None);
         }
     }
 }
