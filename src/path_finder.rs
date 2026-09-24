@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::mem::take;
 
 use screeps::CostMatrix;
 use screeps::Creep;
@@ -9,8 +10,10 @@ use screeps::RoomName;
 use screeps::find;
 use screeps::game;
 use screeps::pathfinder::MultiRoomCostResult;
+use screeps::pathfinder::SearchGoal;
 use screeps::pathfinder::SearchOptions;
 use screeps::pathfinder::search;
+use screeps::pathfinder::search_many;
 use screeps::prelude::*;
 
 const COST_UNWALKABLE: u8 = 255;
@@ -23,6 +26,8 @@ enum PathType {
     NoTarget,
     MoveTo(Position, u32),
     MoveAway(Position, u32),
+    MoveToMulti(Vec<SearchGoal>),
+    MoveAwayMulti(Vec<SearchGoal>),
 }
 
 impl PathFinder {
@@ -40,7 +45,7 @@ impl PathFinder {
 
     /// Note:
     /// If the target is not walkable, set the range to at least 1 to avoid wasting CPU
-    pub fn move_to(&mut self, creep: &Creep, target: impl HasPosition, range: u32) {
+    pub fn move_to(&mut self, creep: &Creep, target: impl HasPosition, range: u32, flee: bool) {
         let target_pos = target.pos();
         if creep.pos().get_range_to(target_pos) <= range {
             return;
@@ -49,22 +54,27 @@ impl PathFinder {
         let Some(id) = id else { return };
         let r = self.creeps.get_mut(&id);
         let Some(r) = r else { return };
-        r.0 = PathType::MoveTo(target_pos, range);
+        r.0 = if flee {
+            PathType::MoveAway(target_pos, range)
+        } else {
+            PathType::MoveTo(target_pos, range)
+        };
     }
 
-    pub fn move_away_from(&mut self, creep: &Creep, target: impl HasPosition, range: u32) {
-        let target_pos = target.pos();
-        if creep.pos().get_range_to(target_pos) >= range {
-            return;
-        }
+    pub fn move_to_multi(&mut self, creep: &Creep, goals: &[SearchGoal], flee: bool) {
+        let goals = goals.iter().map(clone_search_goal).collect();
         let id = creep.try_id();
         let Some(id) = id else { return };
         let r = self.creeps.get_mut(&id);
         let Some(r) = r else { return };
-        r.0 = PathType::MoveAway(target_pos, range);
+        r.0 = if flee {
+            PathType::MoveAwayMulti(goals)
+        } else {
+            PathType::MoveToMulti(goals)
+        };
     }
 
-    pub fn process_movements(&self) {
+    pub fn process_movements(&mut self) {
         let stasis_creeps: Vec<_> = self
             .creeps
             .iter()
@@ -113,18 +123,29 @@ impl PathFinder {
         };
 
         let mut idx = 0;
-        for (id, (target, pos)) in self.creeps.iter() {
+        for (id, (target, pos)) in take(&mut self.creeps).into_iter() {
             let result = match target {
                 PathType::MoveTo(target, range) => {
                     let options = SearchOptions::new(&mut get_costmatrix).max_rooms(1);
-                    search(*pos, *target, *range, Some(options))
+                    search(pos, target, range, Some(options))
                 }
                 PathType::MoveAway(target, range) => {
                     let options = SearchOptions::new(&mut get_costmatrix)
                         .flee(true)
                         .max_rooms(1)
                         .max_ops(100);
-                    search(*pos, *target, *range, Some(options))
+                    search(pos, target, range, Some(options))
+                }
+                PathType::MoveToMulti(goals) => {
+                    let options = SearchOptions::new(&mut get_costmatrix).max_rooms(1);
+                    search_many(pos, goals.into_iter(), Some(options))
+                }
+                PathType::MoveAwayMulti(goals) => {
+                    let options = SearchOptions::new(&mut get_costmatrix)
+                        .flee(true)
+                        .max_rooms(1)
+                        .max_ops(100);
+                    search_many(pos, goals.into_iter(), Some(options))
                 }
                 PathType::NoTarget => continue,
             };
@@ -136,7 +157,7 @@ impl PathFinder {
                 let visual = room.visual();
 
                 let offset = if idx % 2 == 0 { idx / 2 } else { -idx / 2 } as f32 * 0.05;
-                let points = Some(*pos)
+                let points = Some(pos)
                     .into_iter()
                     .chain(result.path())
                     .map(|p| {
@@ -163,4 +184,8 @@ fn clone_result(input: &MultiRoomCostResult) -> MultiRoomCostResult {
         MultiRoomCostResult::Impassable => MultiRoomCostResult::Impassable,
         MultiRoomCostResult::Default => MultiRoomCostResult::Default,
     }
+}
+
+fn clone_search_goal(input: &SearchGoal) -> SearchGoal {
+    unsafe { std::mem::transmute_copy(input) }
 }

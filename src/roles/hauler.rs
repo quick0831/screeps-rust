@@ -54,7 +54,7 @@ impl RoleTrait for Hauler {
             {
                 let err = creep.transfer(transferable, ResourceType::Energy, None);
                 if let Err(TransferErrorCode::NotInRange) = err {
-                    d.path_finder.move_to(creep, target.pos(), 1);
+                    d.path_finder.move_to(creep, target.pos(), 1, false);
                 }
             }
         } else if let Some(target) = self.target {
@@ -62,14 +62,14 @@ impl RoleTrait for Hauler {
                 if let EnergyStore::Creep(target_creep) = target {
                     let err = target_creep.transfer(creep, ResourceType::Energy, None);
                     if let Err(TransferErrorCode::NotInRange) = err {
-                        d.path_finder.move_to(creep, &target_creep, 1);
+                        d.path_finder.move_to(creep, &target_creep, 1, false);
                     } else {
                         self.target = None;
                     }
                 } else if let Some(withdrawable) = target.as_withdrawable() {
                     let err = creep.withdraw(&withdrawable, ResourceType::Energy, None);
                     if let Err(WithdrawErrorCode::NotInRange) = err {
-                        d.path_finder.move_to(creep, target.pos(), 1);
+                        d.path_finder.move_to(creep, target.pos(), 1, false);
                     } else {
                         self.target = None;
                     }
@@ -79,7 +79,7 @@ impl RoleTrait for Hauler {
                 self.target = None;
             }
         } else {
-            d.path_finder.move_away_from(creep, &d.spawns[0], 7);
+            d.path_finder.move_to_multi(creep, &d.keepouts, true);
         }
 
         if creep.store().get_free_capacity(None) == 0 {

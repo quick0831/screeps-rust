@@ -9,6 +9,7 @@ use screeps::TextAlign;
 use screeps::TextStyle;
 use screeps::find;
 use screeps::game;
+use screeps::pathfinder::SearchGoal;
 use screeps::prelude::*;
 use serde::Deserialize;
 use serde::Serialize;
@@ -43,6 +44,7 @@ pub struct SharedData {
     pub role_count: RoleCount,
     pub energy: EnergyStatus,
     pub path_finder: PathFinder,
+    pub keepouts: Vec<SearchGoal>,
 }
 
 #[derive(Debug, Default)]
@@ -84,6 +86,11 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
 
     let path_finder = PathFinder::new(creep_mems.iter().map(|(creep, _)| creep));
 
+    let mut keepouts = Vec::new();
+    for spawn in &spawns {
+        keepouts.push(SearchGoal::new(spawn.pos(), 7));
+    }
+
     let mut d = SharedData {
         spawns,
         room,
@@ -93,6 +100,7 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
         role_count,
         energy,
         path_finder,
+        keepouts,
     };
 
     put_containers(&d);

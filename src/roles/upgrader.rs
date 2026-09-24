@@ -40,7 +40,7 @@ impl RoleTrait for Upgrader {
             if let Err(UpgradeControllerErrorCode::NotInRange) =
                 creep.upgrade_controller(&controller)
             {
-                d.path_finder.move_to(creep, &controller, 3);
+                d.path_finder.move_to(creep, &controller, 3, false);
             }
         } else if self.fetch {
             // grab energy from spawn and extensions
@@ -66,11 +66,11 @@ impl RoleTrait for Upgrader {
             {
                 let err = creep.withdraw(withdrawable, ResourceType::Energy, None);
                 if let Err(WithdrawErrorCode::NotInRange) = err {
-                    d.path_finder.move_to(creep, target.pos(), 1);
+                    d.path_finder.move_to(creep, target.pos(), 1, false);
                 }
             }
         } else {
-            d.path_finder.move_away_from(creep, &d.spawns[0], 7);
+            d.path_finder.move_to_multi(creep, &d.keepouts, true);
         }
     }
 }

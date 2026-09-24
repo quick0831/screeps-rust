@@ -95,7 +95,7 @@ impl RoleTrait for Harvester {
                             self.state = HarvesterState::Stall;
                         }
                         if let Err(TransferErrorCode::NotInRange) = err {
-                            d.path_finder.move_to(creep, &container, 1);
+                            d.path_finder.move_to(creep, &container, 1, false);
                         }
                     }
                 }
@@ -116,7 +116,7 @@ impl RoleTrait for Harvester {
             HarvesterState::Harvest => {
                 let err = creep.harvest(&target);
                 if let Err(HarvestErrorCode::NotInRange) = err {
-                    d.path_finder.move_to(creep, &target, 1);
+                    d.path_finder.move_to(creep, &target, 1, false);
                 } else if err.is_ok() {
                     self.record_harvest =
                         Some(creep.store().get(ResourceType::Energy).unwrap_or(0));
@@ -129,7 +129,7 @@ impl RoleTrait for Harvester {
                 };
                 let err = creep.repair(&container);
                 if let Err(CreepRepairErrorCode::NotInRange) = err {
-                    d.path_finder.move_to(creep, &container, 3);
+                    d.path_finder.move_to(creep, &container, 3, false);
                 }
             }
             HarvesterState::Build => {
@@ -139,7 +139,7 @@ impl RoleTrait for Harvester {
                 };
                 let err = creep.build(&site);
                 if let Err(BuildErrorCode::NotInRange) = err {
-                    d.path_finder.move_to(creep, &site, 3);
+                    d.path_finder.move_to(creep, &site, 3, false);
                 }
             }
             HarvesterState::Stall => {}
