@@ -43,7 +43,7 @@ impl RoleTrait for Builder {
                 && let Some(target) = target.resolve()
             {
                 if let Err(BuildErrorCode::NotInRange) = creep.build(&target) {
-                    d.path_finder.move_to(creep, target.pos(), 3, false);
+                    d.path_finder.move_to(creep, target.pos(), 3);
                 }
             } else {
                 let center = creep.pos();
@@ -78,11 +78,11 @@ impl RoleTrait for Builder {
             {
                 let err = creep.withdraw(withdrawable, ResourceType::Energy, None);
                 if let Err(WithdrawErrorCode::NotInRange) = err {
-                    d.path_finder.move_to(creep, target.pos(), 1, false);
+                    d.path_finder.move_to(creep, target.pos(), 1);
                 }
             }
         } else {
-            d.path_finder.move_to_multi(creep, &d.keepouts, true);
+            d.path_finder.move_away_multi(creep, &d.keepouts);
         }
     }
 }

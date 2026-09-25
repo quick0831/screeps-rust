@@ -45,7 +45,7 @@ impl PathFinder {
 
     /// Note:
     /// If the target is not walkable, set the range to at least 1 to avoid wasting CPU
-    pub fn move_to(&mut self, creep: &Creep, target: impl HasPosition, range: u32, flee: bool) {
+    pub fn move_to(&mut self, creep: &Creep, target: impl HasPosition, range: u32) {
         let target_pos = target.pos();
         if creep.pos().get_range_to(target_pos) <= range {
             return;
@@ -54,24 +54,53 @@ impl PathFinder {
         let Some(id) = id else { return };
         let r = self.creeps.get_mut(&id);
         let Some(r) = r else { return };
-        r.0 = if flee {
-            PathType::MoveAway(target_pos, range)
-        } else {
-            PathType::MoveTo(target_pos, range)
-        };
+        r.0 = PathType::MoveTo(target_pos, range);
     }
 
-    pub fn move_to_multi(&mut self, creep: &Creep, goals: &[SearchGoal], flee: bool) {
+    #[allow(unused)]
+    pub fn move_away(&mut self, creep: &Creep, target: impl HasPosition, range: u32) {
+        let target_pos = target.pos();
+        if creep.pos().get_range_to(target_pos) >= range {
+            return;
+        }
+        let id = creep.try_id();
+        let Some(id) = id else { return };
+        let r = self.creeps.get_mut(&id);
+        let Some(r) = r else { return };
+        r.0 = PathType::MoveAway(target_pos, range);
+    }
+
+    #[allow(unused)]
+    pub fn move_to_multi(&mut self, creep: &Creep, goals: &[SearchGoal]) {
+        let creep_pos = creep.pos();
+        if goals
+            .iter()
+            .any(|g| creep_pos.get_range_to(g.pos().pos()) <= g.range())
+        {
+            return;
+        }
         let goals = goals.iter().map(clone_search_goal).collect();
         let id = creep.try_id();
         let Some(id) = id else { return };
         let r = self.creeps.get_mut(&id);
         let Some(r) = r else { return };
-        r.0 = if flee {
-            PathType::MoveAwayMulti(goals)
-        } else {
-            PathType::MoveToMulti(goals)
-        };
+        r.0 = PathType::MoveToMulti(goals);
+    }
+
+    pub fn move_away_multi(&mut self, creep: &Creep, goals: &[SearchGoal]) {
+        let creep_pos = creep.pos();
+        if goals
+            .iter()
+            .all(|g| creep_pos.get_range_to(g.pos().pos()) >= g.range())
+        {
+            return;
+        }
+        let goals = goals.iter().map(clone_search_goal).collect();
+        let id = creep.try_id();
+        let Some(id) = id else { return };
+        let r = self.creeps.get_mut(&id);
+        let Some(r) = r else { return };
+        r.0 = PathType::MoveAwayMulti(goals);
     }
 
     pub fn process_movements(&mut self) {
