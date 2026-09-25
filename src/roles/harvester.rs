@@ -1,6 +1,8 @@
 use screeps::ConstructionSite;
 use screeps::Creep;
+use screeps::HARVEST_POWER;
 use screeps::ObjectId;
+use screeps::Part;
 use screeps::ResourceType;
 use screeps::Source;
 use screeps::StructureContainer;
@@ -25,8 +27,6 @@ pub struct Harvester {
     target: ObjectId<Source>,
     #[serde(default)]
     state: HarvesterState,
-    #[serde(default)]
-    record_harvest: Option<u32>,
 }
 
 #[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -47,7 +47,6 @@ impl Harvester {
             construction_site: None,
             target,
             state: HarvesterState::default(),
-            record_harvest: None,
         }
     }
 }
@@ -61,13 +60,6 @@ impl RoleTrait for Harvester {
         let Some(target) = self.target.resolve() else {
             return;
         };
-
-        if let Some(energy_before) = self.record_harvest.take() {
-            let energy_after = creep.store().get(ResourceType::Energy).unwrap_or(0);
-            room_memory
-                .energy_rate
-                .record_add(energy_after as i32 - energy_before as i32);
-        }
 
         if self.state == HarvesterState::Stall
             || self.state == HarvesterState::Harvest && creep.store().get_free_capacity(None) == 0
@@ -118,8 +110,14 @@ impl RoleTrait for Harvester {
                 if let Err(HarvestErrorCode::NotInRange) = err {
                     d.path_finder.move_to(creep, &target, 1, false);
                 } else if err.is_ok() {
-                    self.record_harvest =
-                        Some(creep.store().get(ResourceType::Energy).unwrap_or(0));
+                    let size = creep
+                        .body()
+                        .iter()
+                        .filter(|p| p.part() == Part::Work)
+                        .count();
+                    room_memory
+                        .energy_rate
+                        .record_add(HARVEST_POWER as i32 * size as i32);
                 }
             }
             HarvesterState::Repair => {
