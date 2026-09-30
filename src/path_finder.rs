@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 use std::mem::take;
 
-use screeps::CostMatrix;
 use screeps::Creep;
+use screeps::LocalCostMatrix;
 use screeps::MOVE_COST_ROAD;
 use screeps::ObjectId;
 use screeps::PolyStyle;
@@ -127,7 +127,7 @@ impl PathFinder {
                 return MultiRoomCostResult::Default;
             };
 
-            let cost_matrix = CostMatrix::new();
+            let mut cost_matrix = LocalCostMatrix::new();
 
             let structures = room.find(find::STRUCTURES, None);
             let road_pos = structures
@@ -149,14 +149,12 @@ impl PathFinder {
                 .chain(structure_pos)
                 .chain(construction_site_pos)
             {
-                let (x, y) = pos.coords();
-                cost_matrix.set(x, y, COST_UNWALKABLE);
+                cost_matrix.set(pos.xy(), COST_UNWALKABLE);
             }
             for pos in road_pos {
-                let (x, y) = pos.coords();
-                cost_matrix.set(x, y, MOVE_COST_ROAD as u8);
+                cost_matrix.set(pos.xy(), MOVE_COST_ROAD as u8);
             }
-            let result = MultiRoomCostResult::CostMatrix(cost_matrix);
+            let result = MultiRoomCostResult::CostMatrix(cost_matrix.into());
             cache.insert(room_name, clone_result(&result));
             result
         };
