@@ -36,7 +36,7 @@ impl RoleTrait for Hauler {
             let structures = creep.room().unwrap().find(find::MY_STRUCTURES, None);
             let center = creep.pos();
             let target = structures
-                .into_iter()
+                .iter()
                 .filter(|s| {
                     matches!(
                         s.structure_type(),
@@ -49,6 +49,18 @@ impl RoleTrait for Hauler {
                     }) > 0
                 })
                 .min_by_key(|s| center.get_range_to(s.pos()));
+            // allow haul to StructureStorage when all targets are full
+            let target = target.or_else(|| {
+                structures
+                    .iter()
+                    .filter(|s| s.structure_type() == StructureType::Storage)
+                    .filter(|s| {
+                        s.as_has_store().map_or(0, |s| {
+                            s.store().get_free_capacity(Some(ResourceType::Energy))
+                        }) > 10000
+                    })
+                    .min_by_key(|s| center.get_range_to(s.pos()))
+            });
             if let Some(target) = target
                 && let Some(transferable) = target.as_transferable()
             {

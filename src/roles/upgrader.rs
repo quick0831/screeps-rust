@@ -15,7 +15,6 @@ use crate::room::SharedData;
 #[serde(default)]
 pub struct Upgrader {
     upgrading: bool,
-    fetch: bool,
 }
 
 impl RoleTrait for Upgrader {
@@ -24,11 +23,7 @@ impl RoleTrait for Upgrader {
     fn run(&mut self, creep: &Creep, d: &mut SharedData, _room_memory: &mut RoomMemory) {
         if creep.store().get(ResourceType::Energy).unwrap_or(0) == 0 {
             self.upgrading = false;
-            let energy_avail = d.room.energy_available();
-            let energy_cap = d.room.energy_capacity_available();
-            self.fetch = energy_avail > 250 && energy_cap - energy_avail < 300;
-            let msg = if self.fetch { "🫳 fetch" } else { "⏸️" };
-            let _ = creep.say(msg, false);
+            let _ = creep.say("🫳 fetch", false);
         }
         if !self.upgrading && creep.store().get_free_capacity(None) == 0 {
             self.upgrading = true;
@@ -42,18 +37,13 @@ impl RoleTrait for Upgrader {
             {
                 d.path_finder.move_to(creep, &controller, 3);
             }
-        } else if self.fetch {
+        } else {
             // grab energy from spawn and extensions
             let structures = creep.room().unwrap().find(find::MY_STRUCTURES, None);
             let center = creep.pos();
             let target = structures
-                .into_iter()
-                .filter(|s| {
-                    matches!(
-                        s.structure_type(),
-                        StructureType::Extension | StructureType::Spawn
-                    )
-                })
+                .iter()
+                .filter(|s| s.structure_type() == StructureType::Storage)
                 .filter(|s| {
                     s.as_has_store()
                         .and_then(|s| s.store().get(ResourceType::Energy))
@@ -61,6 +51,30 @@ impl RoleTrait for Upgrader {
                         > 0
                 })
                 .min_by_key(|s| center.get_range_to(s.pos()));
+            // fall back to withdraw from extensions
+            let target = target.or_else(|| {
+                let energy_avail = d.room.energy_available();
+                let energy_cap = d.room.energy_capacity_available();
+                if energy_avail > 250 && energy_cap - energy_avail < 300 {
+                    structures
+                        .iter()
+                        .filter(|s| {
+                            matches!(
+                                s.structure_type(),
+                                StructureType::Extension | StructureType::Spawn
+                            )
+                        })
+                        .filter(|s| {
+                            s.as_has_store()
+                                .and_then(|s| s.store().get(ResourceType::Energy))
+                                .unwrap_or(0)
+                                > 0
+                        })
+                        .min_by_key(|s| center.get_range_to(s.pos()))
+                } else {
+                    None
+                }
+            });
             if let Some(target) = target
                 && let Some(withdrawable) = target.as_withdrawable()
             {
@@ -68,9 +82,9 @@ impl RoleTrait for Upgrader {
                 if let Err(WithdrawErrorCode::NotInRange) = err {
                     d.path_finder.move_to(creep, target.pos(), 1);
                 }
+            } else {
+                d.path_finder.move_away_multi(creep, &d.keepouts);
             }
-        } else {
-            d.path_finder.move_away_multi(creep, &d.keepouts);
         }
     }
 }
