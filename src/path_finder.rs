@@ -3,10 +3,12 @@ use std::mem::take;
 
 use screeps::CostMatrix;
 use screeps::Creep;
+use screeps::MOVE_COST_ROAD;
 use screeps::ObjectId;
 use screeps::PolyStyle;
 use screeps::Position;
 use screeps::RoomName;
+use screeps::StructureType;
 use screeps::find;
 use screeps::game;
 use screeps::pathfinder::MultiRoomCostResult;
@@ -127,9 +129,13 @@ impl PathFinder {
 
             let cost_matrix = CostMatrix::new();
 
-            let structure_pos = room
-                .find(find::STRUCTURES, None)
-                .into_iter()
+            let structures = room.find(find::STRUCTURES, None);
+            let road_pos = structures
+                .iter()
+                .filter(|s| s.structure_type() == StructureType::Road)
+                .map(|s| s.pos());
+            let structure_pos = structures
+                .iter()
                 .filter(|s| s.structure_type().is_obstacle())
                 .map(|s| s.pos());
             let construction_site_pos = room
@@ -145,6 +151,10 @@ impl PathFinder {
             {
                 let (x, y) = pos.coords();
                 cost_matrix.set(x, y, COST_UNWALKABLE);
+            }
+            for pos in road_pos {
+                let (x, y) = pos.coords();
+                cost_matrix.set(x, y, MOVE_COST_ROAD as u8);
             }
             let result = MultiRoomCostResult::CostMatrix(cost_matrix);
             cache.insert(room_name, clone_result(&result));
