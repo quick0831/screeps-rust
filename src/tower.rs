@@ -7,6 +7,11 @@ pub fn run(tower: StructureTower) {
     let room = tower.room().unwrap();
     let center = tower.pos();
 
+    if let Some(closest_hostile) = center.find_closest_by_range(find::HOSTILE_CREEPS) {
+        let _ = tower.attack(&closest_hostile);
+        return;
+    }
+
     let nearest_damaged_structures = room
         .find(find::STRUCTURES, None)
         .into_iter()
@@ -26,9 +31,5 @@ pub fn run(tower: StructureTower) {
         && let Some(repairable) = structure.as_repairable()
     {
         let _ = tower.repair(repairable);
-    }
-
-    if let Some(closest_hostile) = tower.pos().find_closest_by_range(find::HOSTILE_CREEPS) {
-        let _ = tower.attack(&closest_hostile);
     }
 }
