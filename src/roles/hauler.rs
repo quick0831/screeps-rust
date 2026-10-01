@@ -100,6 +100,9 @@ impl RoleTrait for Hauler {
         }
         if creep.store().get(ResourceType::Energy).unwrap_or(0) == 0 {
             self.carrying = false;
+            if creep.ticks_to_live().is_some_and(|ttl| ttl < 50) {
+                let _ = creep.suicide();
+            }
         }
     }
 }
