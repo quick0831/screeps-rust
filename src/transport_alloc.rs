@@ -2,11 +2,11 @@ use std::collections::BinaryHeap;
 use std::collections::HashMap;
 use std::collections::HashSet;
 
+use enum_dispatch::enum_dispatch;
 use screeps::CARRY_CAPACITY;
 use screeps::Creep;
 use screeps::ObjectId;
 use screeps::Part;
-use screeps::Position;
 use screeps::ResourceType;
 use screeps::RoomObject;
 use screeps::Store;
@@ -17,24 +17,26 @@ use serde::{Deserialize, Serialize};
 use crate::utils::KeyCmp;
 
 pub struct TransportAllocator {
-    providers: Vec<EnergyStore>,
     haulers: HashMap<ObjectId<Creep>, Info>,
+    // imports: Vec<ResourceImport>,
+    exports: Vec<ResourceExport>,
 }
 
 struct Info {
-    target: Option<EnergyStoreId>,
+    task: Option<Task>,
     size: u8,
 }
 
 impl TransportAllocator {
     pub fn new() -> Self {
         TransportAllocator {
-            providers: Vec::new(),
             haulers: HashMap::new(),
+            // imports: Vec::new(),
+            exports: Vec::new(),
         }
     }
 
-    pub fn register_hauler(&mut self, creep: &Creep, target: Option<EnergyStoreId>) {
+    pub fn register_hauler(&mut self, creep: &Creep, task: Option<Task>) {
         let Some(creep_id) = creep.try_id() else {
             return;
         };
@@ -44,24 +46,26 @@ impl TransportAllocator {
             .map(|p| p.part())
             .filter(|p| *p == Part::Work)
             .count() as u8;
-        self.haulers.insert(creep_id, Info { target, size });
+        self.haulers.insert(creep_id, Info { task, size });
     }
 
-    pub fn file_request(&mut self, provider: EnergyStore) {
-        self.providers.push(provider);
+    pub fn register_export(&mut self, export: impl Into<ResourceExport>) {
+        self.exports.push(export.into());
     }
+
+    /*
+    pub fn register_import(&mut self, import: impl Into<ResourceImport>) {
+        self.imports.push(import.into());
+    }
+    */
 
     pub fn allocate(&mut self) {
-        let being_served: HashSet<_> = self
-            .haulers
-            .values()
-            .filter_map(|info| info.target)
-            .collect();
+        let being_served: HashSet<_> = self.haulers.values().filter_map(|info| info.task).collect();
         let mut pending_serve: BinaryHeap<_> = self
-            .providers
+            .exports
             .iter()
-            .filter_map(|p| Some((p.id()?, p)))
-            .filter(|(id, _)| !being_served.contains(id))
+            .map(|p| (p.id(), p))
+            .filter(|(id, _)| !being_served.contains(&Task::Pickup(*id)))
             .filter_map(|(id, p)| {
                 Some(KeyCmp {
                     key: p.store().get(ResourceType::Energy)?,
@@ -72,7 +76,7 @@ impl TransportAllocator {
         let mut idle_haulers: BinaryHeap<_> = self
             .haulers
             .iter()
-            .filter(|(_, info)| info.target.is_none())
+            .filter(|(_, info)| info.task.is_none())
             .map(|(creep_id, info)| KeyCmp {
                 key: info.size,
                 value: *creep_id,
@@ -88,7 +92,8 @@ impl TransportAllocator {
                 value: store_id,
             }) = pending_serve.pop()
         {
-            self.haulers.get_mut(&hauler_id).unwrap().target = Some(store_id);
+            let task = Task::Pickup(store_id);
+            self.haulers.get_mut(&hauler_id).unwrap().task = Some(task);
             let carriable = size as u32 * CARRY_CAPACITY;
             if carriable < energy {
                 pending_serve.push(KeyCmp {
@@ -99,75 +104,79 @@ impl TransportAllocator {
         }
     }
 
-    pub fn delegate(&self, creep: &Creep) -> Option<EnergyStoreId> {
+    pub fn delegate(&self, creep: &Creep) -> Option<Task> {
         self.haulers
             .get(&creep.try_id()?)
-            .and_then(|info| info.target)
+            .and_then(|info| info.task)
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum EnergyStore {
-    Creep(Creep),
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "task")]
+pub enum Task {
+    Pickup(ResourceExportId),
+    // Supply,
+}
+
+#[allow(unused)]
+#[enum_dispatch(ResourceExport)]
+trait ResourceExporter {}
+
+/*
+#[allow(unused)]
+#[enum_dispatch(ResourceImport)]
+trait ResourceImporter {}
+*/
+
+// Contract: All variant must implement `Withdrawable`
+#[enum_dispatch]
+pub enum ResourceExport {
     Container(StructureContainer),
+}
+
+/*
+// Contract: All variant must implement `Transferable`
+#[enum_dispatch]
+pub enum ResourceImport {
+    Tower(StructureTower),
+}
+*/
+
+impl ResourceExport {
+    fn id(&self) -> ResourceExportId {
+        let Self::Container(container) = self;
+        ResourceExportId::Container(container.id())
+    }
+}
+
+impl HasStore for ResourceExport {
+    fn store(&self) -> Store {
+        let Self::Container(container) = self;
+        container.store()
+    }
+}
+
+impl Withdrawable for ResourceExport {}
+
+impl AsRef<RoomObject> for ResourceExport {
+    fn as_ref(&self) -> &RoomObject {
+        let ResourceExport::Container(container) = self;
+        container.as_ref()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "type", content = "id")]
-pub enum EnergyStoreId {
-    Creep(ObjectId<Creep>),
+pub enum ResourceExportId {
     Container(ObjectId<StructureContainer>),
 }
 
-impl HasPosition for EnergyStore {
-    fn pos(&self) -> Position {
-        match self {
-            EnergyStore::Creep(creep) => creep.pos(),
-            EnergyStore::Container(container) => container.pos(),
-        }
-    }
-}
-
-impl EnergyStore {
-    pub fn id(&self) -> Option<EnergyStoreId> {
+impl ResourceExportId {
+    pub fn resolve(&self) -> Option<ResourceExport> {
         Some(match self {
-            EnergyStore::Creep(creep) => EnergyStoreId::Creep(creep.try_id()?),
-            EnergyStore::Container(container) => EnergyStoreId::Container(container.id()),
-        })
-    }
-
-    pub fn store(&self) -> Store {
-        match self {
-            EnergyStore::Creep(creep) => creep.store(),
-            EnergyStore::Container(container) => container.store(),
-        }
-    }
-
-    pub fn as_withdrawable(&self) -> Option<impl Withdrawable> {
-        struct WithdrawableRoomObject(RoomObject);
-
-        impl Withdrawable for WithdrawableRoomObject {}
-
-        impl AsRef<RoomObject> for WithdrawableRoomObject {
-            fn as_ref(&self) -> &RoomObject {
-                &self.0
+            ResourceExportId::Container(container) => {
+                ResourceExport::Container(container.resolve()?)
             }
-        }
-
-        // Contract: The types must implement `Withdrawable`
-        let room_object: &RoomObject = match self {
-            EnergyStore::Creep(_) => return None,
-            EnergyStore::Container(container) => container,
-        };
-        Some(WithdrawableRoomObject(room_object.clone()))
-    }
-}
-
-impl EnergyStoreId {
-    pub fn resolve(&self) -> Option<EnergyStore> {
-        Some(match self {
-            EnergyStoreId::Creep(creep) => EnergyStore::Creep(creep.resolve()?),
-            EnergyStoreId::Container(container) => EnergyStore::Container(container.resolve()?),
         })
     }
 }

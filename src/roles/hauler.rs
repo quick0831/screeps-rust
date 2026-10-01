@@ -10,26 +10,25 @@ use serde::{Deserialize, Serialize};
 use crate::roles::RoleTrait;
 use crate::room::RoomMemory;
 use crate::room::SharedData;
-use crate::transport_alloc::EnergyStore;
-use crate::transport_alloc::EnergyStoreId;
+use crate::transport_alloc::Task;
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Hauler {
-    target: Option<EnergyStoreId>,
+    task: Option<Task>,
     carrying: bool,
 }
 
 impl RoleTrait for Hauler {
     fn register(&self, creep: &Creep, d: &mut SharedData) {
         if !self.carrying {
-            d.transport_alloc.register_hauler(creep, self.target);
+            d.transport_alloc.register_hauler(creep, self.task);
         }
     }
 
     fn run(&mut self, creep: &Creep, d: &mut SharedData, _room_memory: &mut RoomMemory) {
         if !self.carrying {
-            self.target = d.transport_alloc.delegate(creep).or(self.target);
+            self.task = d.transport_alloc.delegate(creep).or(self.task);
         }
 
         if self.carrying {
@@ -69,26 +68,18 @@ impl RoleTrait for Hauler {
                     d.path_finder.move_to(creep, target.pos(), 1);
                 }
             }
-        } else if let Some(target) = self.target {
-            if let Some(target) = target.resolve() {
-                if let EnergyStore::Creep(target_creep) = target {
-                    let err = target_creep.transfer(creep, ResourceType::Energy, None);
-                    if let Err(TransferErrorCode::NotInRange) = err {
-                        d.path_finder.move_to(creep, &target_creep, 1);
-                    } else {
-                        self.target = None;
-                    }
-                } else if let Some(withdrawable) = target.as_withdrawable() {
-                    let err = creep.withdraw(&withdrawable, ResourceType::Energy, None);
-                    if let Err(WithdrawErrorCode::NotInRange) = err {
-                        d.path_finder.move_to(creep, target.pos(), 1);
-                    } else {
-                        self.target = None;
-                    }
+        } else if let Some(task) = self.task {
+            let Task::Pickup(id) = task;
+            if let Some(target) = id.resolve() {
+                let err = creep.withdraw(&target, ResourceType::Energy, None);
+                if let Err(WithdrawErrorCode::NotInRange) = err {
+                    d.path_finder.move_to(creep, target.pos(), 1);
+                } else {
+                    self.task = None;
                 }
             } else {
                 // target failed to resolve, give up task
-                self.target = None;
+                self.task = None;
             }
         } else {
             d.path_finder.move_away_multi(creep, &d.keepouts);
@@ -96,7 +87,7 @@ impl RoleTrait for Hauler {
 
         if creep.store().get_free_capacity(None) == 0 {
             self.carrying = true;
-            self.target = None;
+            self.task = None;
         }
         if creep.store().get(ResourceType::Energy).unwrap_or(0) == 0 {
             self.carrying = false;

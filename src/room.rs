@@ -26,7 +26,6 @@ use crate::source::ananlyze_source;
 use crate::source_alloc::SourceAllocator;
 use crate::spawn::process_spawning;
 use crate::tower;
-use crate::transport_alloc::EnergyStore;
 use crate::transport_alloc::TransportAllocator;
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -135,8 +134,7 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
         .filter_map(|s| -> Option<StructureContainer> { s.try_into().ok() })
         .filter(|c| c.store().get(ResourceType::Energy).unwrap_or(0) > 0)
     {
-        d.transport_alloc
-            .file_request(EnergyStore::Container(non_empty_container));
+        d.transport_alloc.register_export(non_empty_container);
     }
 
     // Allocation stage
