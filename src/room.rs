@@ -28,6 +28,7 @@ use crate::source::ananlyze_source;
 use crate::source_alloc::SourceAllocator;
 use crate::spawn::process_spawning;
 use crate::tower;
+use crate::transport_alloc::Priority;
 use crate::transport_alloc::TransportAllocator;
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -140,28 +141,28 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
         })
         .filter_map(|id| id.resolve())
         .filter(|c| c.store().get(ResourceType::Energy).unwrap_or(0) > 0)
-        .for_each(|c| d.transport_alloc.register_export(c));
+        .for_each(|c| d.transport_alloc.register_export(c, Priority::High));
 
     let storage: Option<StructureStorage> = my_structures
         .iter()
         .cloned()
         .find_map(|s| s.try_into().ok());
     if let Some(storage) = storage {
-        d.transport_alloc.register_import(storage);
+        d.transport_alloc.register_import(storage, Priority::Low);
     }
 
     d.spawns
         .iter()
         .filter(|s| s.store().get_free_capacity(Some(ResourceType::Energy)) > 0)
         .cloned()
-        .for_each(|s| d.transport_alloc.register_import(s));
+        .for_each(|s| d.transport_alloc.register_import(s, Priority::High));
 
     my_structures
         .iter()
         .cloned()
         .filter_map(|s| -> Option<StructureExtension> { s.try_into().ok() })
         .filter(|s| s.store().get_free_capacity(Some(ResourceType::Energy)) > 0)
-        .for_each(|s| d.transport_alloc.register_import(s));
+        .for_each(|s| d.transport_alloc.register_import(s, Priority::High));
 
     // Allocation stage
     d.transport_alloc.allocate();

@@ -1,3 +1,4 @@
+use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -22,8 +23,8 @@ use crate::utils::KeyCmp;
 
 pub struct TransportAllocator {
     haulers: HashMap<ObjectId<Creep>, Info>,
-    imports: Vec<ResourceImport>,
-    exports: Vec<ResourceExport>,
+    imports: Vec<(ResourceImport, Priority)>,
+    exports: Vec<(ResourceExport, Priority)>,
 }
 
 struct Info {
@@ -62,12 +63,12 @@ impl TransportAllocator {
         );
     }
 
-    pub fn register_export(&mut self, export: impl Into<ResourceExport>) {
-        self.exports.push(export.into());
+    pub fn register_export(&mut self, export: impl Into<ResourceExport>, priority: Priority) {
+        self.exports.push((export.into(), priority));
     }
 
-    pub fn register_import(&mut self, import: impl Into<ResourceImport>) {
-        self.imports.push(import.into());
+    pub fn register_import(&mut self, import: impl Into<ResourceImport>, priority: Priority) {
+        self.imports.push((import.into(), priority));
     }
 
     pub fn allocate(&mut self) {
@@ -75,11 +76,11 @@ impl TransportAllocator {
         let mut pending_export: BinaryHeap<_> = self
             .exports
             .iter()
-            .map(|p| (p.id(), p))
-            .filter(|(id, _)| !being_served.contains(&Task::Pickup(*id)))
-            .filter_map(|(id, p)| {
+            .map(|(p, priority)| (p.id(), p, *priority))
+            .filter(|(id, _, _)| !being_served.contains(&Task::Pickup(*id)))
+            .filter_map(|(id, p, priority)| {
                 Some(KeyCmp {
-                    key: p.store().get(ResourceType::Energy)?,
+                    key: (priority, p.store().get(ResourceType::Energy)?),
                     value: id,
                 })
             })
@@ -87,9 +88,9 @@ impl TransportAllocator {
         let mut pending_import: Vec<_> = self
             .imports
             .iter()
-            .map(|p| (p.id(), p))
-            .filter(|(id, _)| !being_served.contains(&Task::Supply(*id)))
-            .map(|(id, p)| (id, p.pos()))
+            .map(|(p, priority)| (p.id(), p, *priority))
+            .filter(|(id, _, _)| !being_served.contains(&Task::Supply(*id)))
+            .map(|(id, p, priority)| (id, p.pos(), priority))
             .collect();
         let mut idle_haulers: BinaryHeap<_> = self
             .haulers
@@ -113,16 +114,17 @@ impl TransportAllocator {
                 let creep_pos = creep.pos();
                 let idx = pending_import
                     .iter()
-                    .map(|(_, pos)| pos)
                     .enumerate()
-                    .min_by_key(|(_, pos)| pos.get_range_to(creep_pos))
+                    .max_by_key(|(_, (_, pos, priority))| {
+                        (*priority, Reverse(pos.get_range_to(creep_pos)))
+                    })
                     .map(|(idx, _)| idx);
                 let Some(idx) = idx else { break };
-                let (import_id, _) = pending_import.swap_remove(idx);
+                let (import_id, _, _) = pending_import.swap_remove(idx);
                 Task::Supply(import_id)
             } else {
                 let Some(KeyCmp {
-                    key: energy,
+                    key: (priority, energy),
                     value: export_id,
                 }) = pending_export.pop()
                 else {
@@ -130,7 +132,7 @@ impl TransportAllocator {
                 };
                 if carriable < energy {
                     pending_export.push(KeyCmp {
-                        key: energy - carriable,
+                        key: (priority, energy - carriable),
                         value: export_id,
                     });
                 }
@@ -145,6 +147,14 @@ impl TransportAllocator {
             .get(&creep.try_id()?)
             .and_then(|info| info.task)
     }
+}
+
+// Priority::High > Priority::Low
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Priority {
+    Low,
+    Medium,
+    High,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
