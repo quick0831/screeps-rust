@@ -91,6 +91,9 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
     for spawn in &spawns {
         keepouts.push(SearchGoal::new(spawn.pos(), 7));
     }
+    for source in &sources {
+        keepouts.push(SearchGoal::new(source.source.pos(), 1));
+    }
 
     let mut d = SharedData {
         spawns,
