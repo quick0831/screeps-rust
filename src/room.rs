@@ -1,8 +1,9 @@
 use screeps::Creep;
 use screeps::ResourceType;
 use screeps::Room;
-use screeps::StructureContainer;
+use screeps::StructureExtension;
 use screeps::StructureSpawn;
+use screeps::StructureStorage;
 use screeps::StructureTower;
 use screeps::StructureType;
 use screeps::TextAlign;
@@ -21,6 +22,7 @@ use crate::container::put_containers;
 use crate::metric::Metric;
 use crate::path_finder::PathFinder;
 use crate::roles::*;
+use crate::source::ContainerInfo;
 use crate::source::SourceInfo;
 use crate::source::ananlyze_source;
 use crate::source_alloc::SourceAllocator;
@@ -104,14 +106,13 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
 
     put_containers(&d);
 
-    let towers = d
-        .room
-        .find(find::MY_STRUCTURES, None)
-        .into_iter()
-        .filter_map(|s| -> Option<StructureTower> { s.try_into().ok() });
-    for tower in towers {
-        tower::run(tower);
-    }
+    let my_structures = d.room.find(find::MY_STRUCTURES, None);
+
+    my_structures
+        .iter()
+        .cloned()
+        .filter_map(|s| -> Option<StructureTower> { s.try_into().ok() })
+        .for_each(|tower| tower::run(tower, &mut d));
 
     for (_, memory) in &creep_mems {
         match memory.discriminant() {
@@ -127,15 +128,37 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
         memory.register(creep, &mut d);
     }
 
-    for non_empty_container in d
-        .room
-        .find(find::STRUCTURES, None)
-        .into_iter()
-        .filter_map(|s| -> Option<StructureContainer> { s.try_into().ok() })
+    // Add source containers as exporters
+    d.sources
+        .iter()
+        .filter_map(|s| match s.container {
+            ContainerInfo::Built(id) => Some(id),
+            _ => None,
+        })
+        .filter_map(|id| id.resolve())
         .filter(|c| c.store().get(ResourceType::Energy).unwrap_or(0) > 0)
-    {
-        d.transport_alloc.register_export(non_empty_container);
+        .for_each(|c| d.transport_alloc.register_export(c));
+
+    let storage: Option<StructureStorage> = my_structures
+        .iter()
+        .cloned()
+        .find_map(|s| s.try_into().ok());
+    if let Some(storage) = storage {
+        d.transport_alloc.register_import(storage);
     }
+
+    d.spawns
+        .iter()
+        .filter(|s| s.store().get_free_capacity(Some(ResourceType::Energy)) > 0)
+        .cloned()
+        .for_each(|s| d.transport_alloc.register_import(s));
+
+    my_structures
+        .iter()
+        .cloned()
+        .filter_map(|s| -> Option<StructureExtension> { s.try_into().ok() })
+        .filter(|s| s.store().get_free_capacity(Some(ResourceType::Energy)) > 0)
+        .for_each(|s| d.transport_alloc.register_import(s));
 
     // Allocation stage
     d.transport_alloc.allocate();

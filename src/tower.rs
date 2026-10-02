@@ -1,11 +1,23 @@
+use screeps::ResourceType;
 use screeps::StructureTower;
 use screeps::StructureType;
+use screeps::TOWER_CAPACITY;
 use screeps::find;
 use screeps::prelude::*;
 
-pub fn run(tower: StructureTower) {
+use crate::room::SharedData;
+
+const ENERGY_THRESHOLD: u32 = (TOWER_CAPACITY as f64 * 0.8) as u32;
+
+pub fn run(tower: StructureTower, d: &mut SharedData) {
     let room = tower.room().unwrap();
     let center = tower.pos();
+
+    let store = tower.store();
+    let energy_available = store.get(ResourceType::Energy).unwrap_or(0);
+    if energy_available < ENERGY_THRESHOLD {
+        d.transport_alloc.register_import(tower.clone());
+    }
 
     if let Some(closest_hostile) = center.find_closest_by_range(find::HOSTILE_CREEPS) {
         let _ = tower.attack(&closest_hostile);

@@ -11,6 +11,10 @@ use screeps::ResourceType;
 use screeps::RoomObject;
 use screeps::Store;
 use screeps::StructureContainer;
+use screeps::StructureExtension;
+use screeps::StructureSpawn;
+use screeps::StructureStorage;
+use screeps::StructureTower;
 use screeps::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -18,20 +22,21 @@ use crate::utils::KeyCmp;
 
 pub struct TransportAllocator {
     haulers: HashMap<ObjectId<Creep>, Info>,
-    // imports: Vec<ResourceImport>,
+    imports: Vec<ResourceImport>,
     exports: Vec<ResourceExport>,
 }
 
 struct Info {
     task: Option<Task>,
     size: u8,
+    carrying: bool,
 }
 
 impl TransportAllocator {
     pub fn new() -> Self {
         TransportAllocator {
             haulers: HashMap::new(),
-            // imports: Vec::new(),
+            imports: Vec::new(),
             exports: Vec::new(),
         }
     }
@@ -46,22 +51,28 @@ impl TransportAllocator {
             .map(|p| p.part())
             .filter(|p| *p == Part::Work)
             .count() as u8;
-        self.haulers.insert(creep_id, Info { task, size });
+        let carrying = creep.store().get_used_capacity(None) > 20;
+        self.haulers.insert(
+            creep_id,
+            Info {
+                task,
+                size,
+                carrying,
+            },
+        );
     }
 
     pub fn register_export(&mut self, export: impl Into<ResourceExport>) {
         self.exports.push(export.into());
     }
 
-    /*
     pub fn register_import(&mut self, import: impl Into<ResourceImport>) {
         self.imports.push(import.into());
     }
-    */
 
     pub fn allocate(&mut self) {
         let being_served: HashSet<_> = self.haulers.values().filter_map(|info| info.task).collect();
-        let mut pending_serve: BinaryHeap<_> = self
+        let mut pending_export: BinaryHeap<_> = self
             .exports
             .iter()
             .map(|p| (p.id(), p))
@@ -73,34 +84,59 @@ impl TransportAllocator {
                 })
             })
             .collect();
+        let mut pending_import: Vec<_> = self
+            .imports
+            .iter()
+            .map(|p| (p.id(), p))
+            .filter(|(id, _)| !being_served.contains(&Task::Supply(*id)))
+            .map(|(id, p)| (id, p.pos()))
+            .collect();
         let mut idle_haulers: BinaryHeap<_> = self
             .haulers
             .iter()
             .filter(|(_, info)| info.task.is_none())
             .map(|(creep_id, info)| KeyCmp {
                 key: info.size,
-                value: *creep_id,
+                value: (*creep_id, info.carrying),
             })
             .collect();
 
         while let Some(KeyCmp {
             key: size,
-            value: hauler_id,
+            value: (hauler_id, hauler_carrying),
         }) = idle_haulers.pop()
-            && let Some(KeyCmp {
-                key: energy,
-                value: store_id,
-            }) = pending_serve.pop()
         {
-            let task = Task::Pickup(store_id);
-            self.haulers.get_mut(&hauler_id).unwrap().task = Some(task);
             let carriable = size as u32 * CARRY_CAPACITY;
-            if carriable < energy {
-                pending_serve.push(KeyCmp {
-                    key: energy - carriable,
-                    value: store_id,
-                });
-            }
+            let task = if hauler_carrying {
+                let creep = hauler_id.resolve();
+                let Some(creep) = creep else { continue };
+                let creep_pos = creep.pos();
+                let idx = pending_import
+                    .iter()
+                    .map(|(_, pos)| pos)
+                    .enumerate()
+                    .min_by_key(|(_, pos)| pos.get_range_to(creep_pos))
+                    .map(|(idx, _)| idx);
+                let Some(idx) = idx else { break };
+                let (import_id, _) = pending_import.swap_remove(idx);
+                Task::Supply(import_id)
+            } else {
+                let Some(KeyCmp {
+                    key: energy,
+                    value: export_id,
+                }) = pending_export.pop()
+                else {
+                    break;
+                };
+                if carriable < energy {
+                    pending_export.push(KeyCmp {
+                        key: energy - carriable,
+                        value: export_id,
+                    });
+                }
+                Task::Pickup(export_id)
+            };
+            self.haulers.get_mut(&hauler_id).unwrap().task = Some(task);
         }
     }
 
@@ -115,18 +151,16 @@ impl TransportAllocator {
 #[serde(rename_all = "snake_case", tag = "task")]
 pub enum Task {
     Pickup(ResourceExportId),
-    // Supply,
+    Supply(ResourceImportId),
 }
 
 #[allow(unused)]
 #[enum_dispatch(ResourceExport)]
 trait ResourceExporter {}
 
-/*
 #[allow(unused)]
 #[enum_dispatch(ResourceImport)]
 trait ResourceImporter {}
-*/
 
 // Contract: All variant must implement `Withdrawable`
 #[enum_dispatch]
@@ -134,18 +168,30 @@ pub enum ResourceExport {
     Container(StructureContainer),
 }
 
-/*
 // Contract: All variant must implement `Transferable`
 #[enum_dispatch]
 pub enum ResourceImport {
+    Spawn(StructureSpawn),
+    Extension(StructureExtension),
     Tower(StructureTower),
+    Storage(StructureStorage),
 }
-*/
 
 impl ResourceExport {
     fn id(&self) -> ResourceExportId {
         let Self::Container(container) = self;
         ResourceExportId::Container(container.id())
+    }
+}
+
+impl ResourceImport {
+    fn id(&self) -> ResourceImportId {
+        match self {
+            Self::Spawn(spawn) => ResourceImportId::Spawn(spawn.id()),
+            Self::Extension(extension) => ResourceImportId::Extension(extension.id()),
+            Self::Tower(tower) => ResourceImportId::Tower(tower.id()),
+            Self::Storage(storage) => ResourceImportId::Storage(storage.id()),
+        }
     }
 }
 
@@ -156,12 +202,36 @@ impl HasStore for ResourceExport {
     }
 }
 
+impl HasStore for ResourceImport {
+    fn store(&self) -> Store {
+        match self {
+            Self::Spawn(spawn) => spawn.store(),
+            Self::Extension(extension) => extension.store(),
+            Self::Tower(tower) => tower.store(),
+            Self::Storage(storage) => storage.store(),
+        }
+    }
+}
+
 impl Withdrawable for ResourceExport {}
+
+impl Transferable for ResourceImport {}
 
 impl AsRef<RoomObject> for ResourceExport {
     fn as_ref(&self) -> &RoomObject {
         let ResourceExport::Container(container) = self;
         container.as_ref()
+    }
+}
+
+impl AsRef<RoomObject> for ResourceImport {
+    fn as_ref(&self) -> &RoomObject {
+        match self {
+            Self::Spawn(spawn) => spawn.as_ref(),
+            Self::Extension(extension) => extension.as_ref(),
+            Self::Tower(tower) => tower.as_ref(),
+            Self::Storage(storage) => storage.as_ref(),
+        }
     }
 }
 
@@ -171,12 +241,32 @@ pub enum ResourceExportId {
     Container(ObjectId<StructureContainer>),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "type", content = "id")]
+pub enum ResourceImportId {
+    Spawn(ObjectId<StructureSpawn>),
+    Extension(ObjectId<StructureExtension>),
+    Tower(ObjectId<StructureTower>),
+    Storage(ObjectId<StructureStorage>),
+}
+
 impl ResourceExportId {
     pub fn resolve(&self) -> Option<ResourceExport> {
         Some(match self {
             ResourceExportId::Container(container) => {
                 ResourceExport::Container(container.resolve()?)
             }
+        })
+    }
+}
+
+impl ResourceImportId {
+    pub fn resolve(&self) -> Option<ResourceImport> {
+        Some(match self {
+            ResourceImportId::Spawn(id) => ResourceImport::Spawn(id.resolve()?),
+            ResourceImportId::Extension(id) => ResourceImport::Extension(id.resolve()?),
+            ResourceImportId::Tower(id) => ResourceImport::Tower(id.resolve()?),
+            ResourceImportId::Storage(id) => ResourceImport::Storage(id.resolve()?),
         })
     }
 }

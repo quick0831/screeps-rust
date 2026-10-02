@@ -1,9 +1,7 @@
 use screeps::Creep;
 use screeps::ResourceType;
-use screeps::StructureType;
 use screeps::action_error_codes::TransferErrorCode;
 use screeps::action_error_codes::WithdrawErrorCode;
-use screeps::find;
 use screeps::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -16,83 +14,57 @@ use crate::transport_alloc::Task;
 #[serde(default)]
 pub struct Hauler {
     task: Option<Task>,
-    carrying: bool,
 }
 
 impl RoleTrait for Hauler {
     fn register(&self, creep: &Creep, d: &mut SharedData) {
-        if !self.carrying {
-            d.transport_alloc.register_hauler(creep, self.task);
-        }
+        d.transport_alloc.register_hauler(creep, self.task);
     }
 
     fn run(&mut self, creep: &Creep, d: &mut SharedData, _room_memory: &mut RoomMemory) {
-        if !self.carrying {
-            self.task = d.transport_alloc.delegate(creep).or(self.task);
+        if creep.ticks_to_live().is_some_and(|ttl| ttl < 50) {
+            if creep.store().get_used_capacity(None) == 0 {
+                let _ = creep.suicide();
+            } else {
+                // TODO: deposit whatever it is carrying
+            }
+            return;
         }
 
-        if self.carrying {
-            let structures = creep.room().unwrap().find(find::MY_STRUCTURES, None);
-            let center = creep.pos();
-            let target = structures
-                .iter()
-                .filter(|s| {
-                    matches!(
-                        s.structure_type(),
-                        StructureType::Extension | StructureType::Spawn | StructureType::Tower
-                    )
-                })
-                .filter(|s| {
-                    s.as_has_store().map_or(0, |s| {
-                        s.store().get_free_capacity(Some(ResourceType::Energy))
-                    }) > 0
-                })
-                .min_by_key(|s| center.get_range_to(s.pos()));
-            // allow haul to StructureStorage when all targets are full
-            let target = target.or_else(|| {
-                structures
-                    .iter()
-                    .filter(|s| s.structure_type() == StructureType::Storage)
-                    .filter(|s| {
-                        s.as_has_store().map_or(0, |s| {
-                            s.store().get_free_capacity(Some(ResourceType::Energy))
-                        }) > 10000
-                    })
-                    .min_by_key(|s| center.get_range_to(s.pos()))
-            });
-            if let Some(target) = target
-                && let Some(transferable) = target.as_transferable()
-            {
-                let err = creep.transfer(transferable, ResourceType::Energy, None);
-                if let Err(TransferErrorCode::NotInRange) = err {
-                    d.path_finder.move_to(creep, target.pos(), 1);
-                }
-            }
-        } else if let Some(task) = self.task {
-            let Task::Pickup(id) = task;
-            if let Some(target) = id.resolve() {
-                let err = creep.withdraw(&target, ResourceType::Energy, None);
-                if let Err(WithdrawErrorCode::NotInRange) = err {
-                    d.path_finder.move_to(creep, target.pos(), 1);
+        if self.task.is_none() {
+            self.task = d.transport_alloc.delegate(creep);
+        }
+
+        match self.task {
+            Some(Task::Pickup(id)) => {
+                if let Some(target) = id.resolve() {
+                    let err = creep.withdraw(&target, ResourceType::Energy, None);
+                    if let Err(WithdrawErrorCode::NotInRange) = err {
+                        d.path_finder.move_to(creep, target.pos(), 1);
+                    } else {
+                        self.task = None;
+                    }
                 } else {
+                    // target failed to resolve, give up task
                     self.task = None;
                 }
-            } else {
-                // target failed to resolve, give up task
-                self.task = None;
             }
-        } else {
-            d.path_finder.move_away_multi(creep, &d.keepouts);
-        }
-
-        if creep.store().get_free_capacity(None) == 0 {
-            self.carrying = true;
-            self.task = None;
-        }
-        if creep.store().get(ResourceType::Energy).unwrap_or(0) == 0 {
-            self.carrying = false;
-            if creep.ticks_to_live().is_some_and(|ttl| ttl < 50) {
-                let _ = creep.suicide();
+            Some(Task::Supply(id)) => {
+                if let Some(target) = id.resolve() {
+                    let err = creep.transfer(&target, ResourceType::Energy, None);
+                    if let Err(TransferErrorCode::NotInRange) = err {
+                        d.path_finder.move_to(creep, target.pos(), 1);
+                    } else {
+                        self.task = None;
+                    }
+                } else {
+                    // target failed to resolve, give up task
+                    self.task = None;
+                }
+            }
+            None => {
+                // No task available, enter idle state
+                d.path_finder.move_away_multi(creep, &d.keepouts);
             }
         }
     }
