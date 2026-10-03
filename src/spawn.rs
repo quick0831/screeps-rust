@@ -4,6 +4,7 @@ use std::cmp::min;
 use log::error;
 use log::info;
 use screeps::Part;
+use screeps::ResourceType;
 use screeps::SpawnOptions;
 use screeps::StructureSpawn;
 use screeps::TextAlign;
@@ -44,11 +45,16 @@ pub fn process_spawning(d: &SharedData) {
         }
     };
 
-    let has_container = d
+    let container_energy: u32 = d
         .sources
         .iter()
-        .find(|s| matches!(s.container, ContainerInfo::Built(_)))
-        .is_some();
+        .filter_map(|s| match s.container {
+            ContainerInfo::Built(id) => id.resolve()?.store().get(ResourceType::Energy),
+            _ => None,
+        })
+        .sum();
+
+    let cold_start = d.role_count.harvesters == 0 || d.role_count.haulers == 0;
 
     for spawn in &d.spawns {
         if let Some(spawning) = spawn.spawning() {
@@ -59,10 +65,11 @@ pub fn process_spawning(d: &SharedData) {
                 let role = memory.discriminant();
                 show_text(spawn, format!("🛠️ {role}"));
             }
-        } else if has_container && d.role_count.haulers < 5 {
+        } else if container_energy > 300 && d.role_count.haulers < 5 {
             let unit_part = [Part::Move, Part::Carry];
             let unit_cost: u32 = unit_part.map(Part::cost).into_iter().sum();
             let spawn_cap = (max(300, d.energy.capacity - 300) / unit_cost) as u8;
+            let spawn_cap = if cold_start { 2 } else { spawn_cap };
             let spawn_size = min(10, spawn_cap) as usize;
             let body = unit_part.repeat(spawn_size);
             let name = format!("Hauler{time}");
@@ -73,6 +80,7 @@ pub fn process_spawning(d: &SharedData) {
             let unit_part = [Part::Move, Part::Work, Part::Carry];
             let unit_cost: u32 = unit_part.map(Part::cost).into_iter().sum();
             let spawn_cap = (max(300, d.energy.capacity - 300) / unit_cost) as u8;
+            let spawn_cap = if cold_start { 1 } else { spawn_cap };
             let spawn_size = min(spawn_size, spawn_cap) as usize;
             let body = unit_part.repeat(spawn_size);
             let name = format!("Harvester{time}");
