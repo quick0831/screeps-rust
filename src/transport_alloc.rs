@@ -23,14 +23,26 @@ use crate::utils::KeyCmp;
 
 pub struct TransportAllocator {
     haulers: HashMap<ObjectId<Creep>, Info>,
-    imports: Vec<(ResourceImport, Priority)>,
-    exports: Vec<(ResourceExport, Priority)>,
+    imports: Vec<ImportInfo>,
+    exports: Vec<ExportInfo>,
 }
 
 struct Info {
     task: Option<Task>,
     size: u8,
-    carrying: bool,
+    carrying: u32,
+}
+
+struct ImportInfo {
+    target: ResourceImport,
+    priority: Priority,
+    amount: u32,
+}
+
+struct ExportInfo {
+    target: ResourceExport,
+    priority: Priority,
+    amount: u32,
 }
 
 impl TransportAllocator {
@@ -52,7 +64,7 @@ impl TransportAllocator {
             .map(|p| p.part())
             .filter(|p| *p == Part::Work)
             .count() as u8;
-        let carrying = creep.store().get_used_capacity(None) > 20;
+        let carrying = creep.store().get_used_capacity(None);
         self.haulers.insert(
             creep_id,
             Info {
@@ -64,11 +76,27 @@ impl TransportAllocator {
     }
 
     pub fn register_export(&mut self, export: impl Into<ResourceExport>, priority: Priority) {
-        self.exports.push((export.into(), priority));
+        let target = export.into();
+        let amount = target.store().get(ResourceType::Energy).unwrap_or(0);
+        if amount > 0 {
+            self.exports.push(ExportInfo {
+                target,
+                priority,
+                amount,
+            });
+        }
     }
 
     pub fn register_import(&mut self, import: impl Into<ResourceImport>, priority: Priority) {
-        self.imports.push((import.into(), priority));
+        let target = import.into();
+        let amount = target.store().get_free_capacity(Some(ResourceType::Energy)) as u32;
+        if amount > 0 {
+            self.imports.push(ImportInfo {
+                target,
+                priority,
+                amount,
+            });
+        }
     }
 
     pub fn allocate(&mut self) {
@@ -76,21 +104,19 @@ impl TransportAllocator {
         let mut pending_export: BinaryHeap<_> = self
             .exports
             .iter()
-            .map(|(p, priority)| (p.id(), p, *priority))
-            .filter(|(id, _, _)| !being_served.contains(&Task::Pickup(*id)))
-            .filter_map(|(id, p, priority)| {
-                Some(KeyCmp {
-                    key: (priority, p.store().get(ResourceType::Energy)?),
-                    value: id,
-                })
+            .map(|info| (info.target.id(), info))
+            .filter(|(id, _)| !being_served.contains(&Task::Pickup(*id)))
+            .map(|(id, info)| KeyCmp {
+                key: (info.priority, info.amount),
+                value: id,
             })
             .collect();
         let mut pending_import: Vec<_> = self
             .imports
             .iter()
-            .map(|(p, priority)| (p.id(), p, *priority))
-            .filter(|(id, _, _)| !being_served.contains(&Task::Supply(*id)))
-            .map(|(id, p, priority)| (id, p.pos(), priority))
+            .map(|info| (info.target.id(), info))
+            .filter(|(id, _)| !being_served.contains(&Task::Supply(*id)))
+            .map(|(id, info)| (id, info.target.pos(), info.priority, info.amount))
             .collect();
         let mut idle_haulers: BinaryHeap<_> = self
             .haulers
@@ -108,19 +134,22 @@ impl TransportAllocator {
         }) = idle_haulers.pop()
         {
             let carriable = size as u32 * CARRY_CAPACITY;
-            let task = if hauler_carrying {
+            let task = if hauler_carrying > 20 {
                 let creep = hauler_id.resolve();
                 let Some(creep) = creep else { continue };
                 let creep_pos = creep.pos();
                 let idx = pending_import
                     .iter()
                     .enumerate()
-                    .max_by_key(|(_, (_, pos, priority))| {
+                    .max_by_key(|(_, (_, pos, priority, _))| {
                         (*priority, Reverse(pos.get_range_to(creep_pos)))
                     })
                     .map(|(idx, _)| idx);
                 let Some(idx) = idx else { break };
-                let (import_id, _, _) = pending_import.swap_remove(idx);
+                let (import_id, pos, priority, amount) = pending_import.swap_remove(idx);
+                if hauler_carrying < amount {
+                    pending_import.push((import_id, pos, priority, amount - hauler_carrying));
+                }
                 Task::Supply(import_id)
             } else {
                 let Some(KeyCmp {
