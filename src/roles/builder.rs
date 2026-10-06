@@ -51,10 +51,10 @@ impl RoleTrait for Builder {
                 .into_iter()
                 .min_by_key(|s| center.get_range_to(s.pos()))
                 .and_then(|site| site.try_id());
-            let _ = creep.say("🚧 build", false);
         }
         if creep.store().get_free_capacity(None) == 0 {
             self.state = BuilderState::Build;
+            let _ = creep.say("🚧 build", false);
         }
 
         match (self.state, self.target) {
