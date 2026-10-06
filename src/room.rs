@@ -147,22 +147,37 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
         .iter()
         .cloned()
         .find_map(|s| s.try_into().ok());
-    if let Some(storage) = storage {
-        d.transport_alloc.register_import(storage, Priority::Low);
+    let no_storage = storage.is_none();
+    if let Some(s) = storage {
+        d.transport_alloc
+            .register_import(s.clone(), Priority::Passive);
+        d.transport_alloc.register_export(s, Priority::Passive);
     }
 
     d.spawns
         .iter()
         .filter(|s| s.store().get_free_capacity(Some(ResourceType::Energy)) > 0)
         .cloned()
-        .for_each(|s| d.transport_alloc.register_import(s, Priority::High));
+        .for_each(|s| {
+            if no_storage {
+                d.transport_alloc
+                    .register_export(s.clone(), Priority::Passive);
+            }
+            d.transport_alloc.register_import(s, Priority::High);
+        });
 
     my_structures
         .iter()
         .cloned()
         .filter_map(|s| -> Option<StructureExtension> { s.try_into().ok() })
         .filter(|s| s.store().get_free_capacity(Some(ResourceType::Energy)) > 0)
-        .for_each(|s| d.transport_alloc.register_import(s, Priority::High));
+        .for_each(|s| {
+            if no_storage {
+                d.transport_alloc
+                    .register_export(s.clone(), Priority::Passive);
+            }
+            d.transport_alloc.register_import(s, Priority::High);
+        });
 
     // Allocation stage
     d.transport_alloc.allocate();

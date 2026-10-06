@@ -18,7 +18,7 @@ pub fn run(tower: StructureTower, d: &mut SharedData) {
     let energy_available = store.get(ResourceType::Energy).unwrap_or(0);
     if energy_available < ENERGY_THRESHOLD {
         d.transport_alloc
-            .register_import(tower.clone(), Priority::Medium);
+            .register_import(tower.clone(), Priority::Low);
     }
 
     if let Some(closest_hostile) = center.find_closest_by_range(find::HOSTILE_CREEPS) {

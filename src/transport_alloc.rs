@@ -181,8 +181,8 @@ impl TransportAllocator {
 // Priority::High > Priority::Low
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Priority {
+    Passive,
     Low,
-    Medium,
     High,
 }
 
@@ -205,6 +205,9 @@ trait ResourceImporter {}
 #[enum_dispatch]
 pub enum ResourceExport {
     Container(StructureContainer),
+    Spawn(StructureSpawn),
+    Extension(StructureExtension),
+    Storage(StructureStorage),
 }
 
 // Contract: All variant must implement `Transferable`
@@ -218,8 +221,12 @@ pub enum ResourceImport {
 
 impl ResourceExport {
     fn id(&self) -> ResourceExportId {
-        let Self::Container(container) = self;
-        ResourceExportId::Container(container.id())
+        match self {
+            Self::Container(container) => ResourceExportId::Container(container.id()),
+            Self::Spawn(spawn) => ResourceExportId::Spawn(spawn.id()),
+            Self::Extension(extension) => ResourceExportId::Extension(extension.id()),
+            Self::Storage(storage) => ResourceExportId::Storage(storage.id()),
+        }
     }
 }
 
@@ -236,8 +243,12 @@ impl ResourceImport {
 
 impl HasStore for ResourceExport {
     fn store(&self) -> Store {
-        let Self::Container(container) = self;
-        container.store()
+        match self {
+            Self::Container(container) => container.store(),
+            Self::Spawn(spawn) => spawn.store(),
+            Self::Extension(extension) => extension.store(),
+            Self::Storage(storage) => storage.store(),
+        }
     }
 }
 
@@ -258,8 +269,12 @@ impl Transferable for ResourceImport {}
 
 impl AsRef<RoomObject> for ResourceExport {
     fn as_ref(&self) -> &RoomObject {
-        let ResourceExport::Container(container) = self;
-        container.as_ref()
+        match self {
+            Self::Container(container) => container.as_ref(),
+            Self::Spawn(spawn) => spawn.as_ref(),
+            Self::Extension(extension) => extension.as_ref(),
+            Self::Storage(storage) => storage.as_ref(),
+        }
     }
 }
 
@@ -278,6 +293,9 @@ impl AsRef<RoomObject> for ResourceImport {
 #[serde(rename_all = "snake_case", tag = "type", content = "id")]
 pub enum ResourceExportId {
     Container(ObjectId<StructureContainer>),
+    Spawn(ObjectId<StructureSpawn>),
+    Extension(ObjectId<StructureExtension>),
+    Storage(ObjectId<StructureStorage>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -292,9 +310,10 @@ pub enum ResourceImportId {
 impl ResourceExportId {
     pub fn resolve(&self) -> Option<ResourceExport> {
         Some(match self {
-            ResourceExportId::Container(container) => {
-                ResourceExport::Container(container.resolve()?)
-            }
+            ResourceExportId::Container(id) => ResourceExport::Container(id.resolve()?),
+            ResourceExportId::Spawn(id) => ResourceExport::Spawn(id.resolve()?),
+            ResourceExportId::Extension(id) => ResourceExport::Extension(id.resolve()?),
+            ResourceExportId::Storage(id) => ResourceExport::Storage(id.resolve()?),
         })
     }
 }
