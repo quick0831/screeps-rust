@@ -1,12 +1,13 @@
-use std::cmp::Reverse;
+use std::arch::wasm32::unreachable;
+use std::cmp::max;
+use std::cmp::min;
 use std::collections::HashMap;
-use std::collections::HashSet;
 
 use enum_dispatch::enum_dispatch;
-use screeps::CARRY_CAPACITY;
 use screeps::Creep;
 use screeps::ObjectId;
 use screeps::Part;
+use screeps::Position;
 use screeps::ResourceType;
 use screeps::RoomObject;
 use screeps::Store;
@@ -18,6 +19,7 @@ use screeps::StructureTower;
 use screeps::prelude::*;
 use serde::{Deserialize, Serialize};
 
+use crate::utils::Fraction;
 use crate::utils::PriorityQueue;
 
 pub struct TransportAllocator {
@@ -29,19 +31,23 @@ pub struct TransportAllocator {
 struct Info {
     task: Option<Task>,
     size: u8,
-    carrying: u32,
+    used_capacity: u32,
+    free_capacity: u32,
+    pos: Position,
 }
 
 struct ImportInfo {
     target: ResourceImport,
     priority: Priority,
     amount: u32,
+    pos: Position,
 }
 
 struct ExportInfo {
     target: ResourceExport,
     priority: Priority,
     amount: u32,
+    pos: Position,
 }
 
 impl TransportAllocator {
@@ -63,13 +69,17 @@ impl TransportAllocator {
             .map(|p| p.part())
             .filter(|p| *p == Part::Work)
             .count() as u8;
-        let carrying = creep.store().get_used_capacity(None);
+        let used_capacity = creep.store().get_used_capacity(None);
+        let free_capacity = creep.store().get_free_capacity(None) as u32;
+        let pos = creep.pos();
         self.haulers.insert(
             creep_id,
             Info {
                 task,
                 size,
-                carrying,
+                used_capacity,
+                free_capacity,
+                pos,
             },
         );
     }
@@ -77,11 +87,13 @@ impl TransportAllocator {
     pub fn register_export(&mut self, export: impl Into<ResourceExport>, priority: Priority) {
         let target = export.into();
         let amount = target.store().get(ResourceType::Energy).unwrap_or(0);
+        let pos = target.pos();
         if amount > 0 {
             self.exports.push(ExportInfo {
                 target,
                 priority,
                 amount,
+                pos,
             });
         }
     }
@@ -89,67 +101,138 @@ impl TransportAllocator {
     pub fn register_import(&mut self, import: impl Into<ResourceImport>, priority: Priority) {
         let target = import.into();
         let amount = target.store().get_free_capacity(Some(ResourceType::Energy)) as u32;
+        let pos = target.pos();
         if amount > 0 {
             self.imports.push(ImportInfo {
                 target,
                 priority,
                 amount,
+                pos,
             });
         }
     }
 
     pub fn allocate(&mut self) {
-        let being_served: HashSet<_> = self.haulers.values().filter_map(|info| info.task).collect();
-        let mut pending_export: PriorityQueue<_, _> = self
-            .exports
-            .iter()
-            .map(|info| (info.target.id(), info))
-            .filter(|(id, _)| !being_served.contains(&Task::Pickup(*id)))
-            .map(|(id, info)| ((info.priority, info.amount), id))
-            .collect();
-        let mut pending_import: Vec<_> = self
+        // Remove corresponded amount already queued
+        for info in self.haulers.values() {
+            let Some(task) = info.task else { continue };
+            match task {
+                Task::Pickup(id) => {
+                    if let Some(export) = self.exports.iter_mut().find(|ex| ex.target.id() == id) {
+                        export.amount = export.amount.saturating_sub(info.free_capacity);
+                    }
+                }
+                Task::Supply(id) => {
+                    if let Some(import) = self.imports.iter_mut().find(|ex| ex.target.id() == id) {
+                        import.amount = import.amount.saturating_sub(info.used_capacity);
+                    }
+                }
+            }
+        }
+
+        self.exports.retain(|info| info.amount > 0);
+        self.imports.retain(|info| info.amount > 0);
+
+        // calculate needed network flow
+        let total_import: u32 = self.imports.iter().map(|info| info.amount).sum();
+        let total_export: u32 = self.exports.iter().map(|info| info.amount).sum();
+        let total_hauler_holding: u32 = self.haulers.values().map(|info| info.used_capacity).sum();
+        let active_import: u32 = self
             .imports
             .iter()
-            .map(|info| (info.target.id(), info))
-            .filter(|(id, _)| !being_served.contains(&Task::Supply(*id)))
-            .map(|(id, info)| (id, info.target.pos(), info.priority, info.amount))
-            .collect();
-        let mut idle_haulers: PriorityQueue<_, _> = self
-            .haulers
+            .filter(|info| info.priority != Priority::Passive)
+            .map(|info| info.amount)
+            .sum();
+        let active_export: u32 = self
+            .exports
             .iter()
-            .filter(|(_, info)| info.task.is_none())
-            .map(|(creep_id, info)| (info.size, (*creep_id, info.carrying)))
+            .filter(|info| info.priority != Priority::Passive)
+            .map(|info| info.amount)
+            .sum();
+
+        let network_cap = min(total_import, total_export);
+        let mut export_requested = min(network_cap, max(active_import, active_export));
+        let mut import_requested = min(
+            network_cap,
+            max(active_import, active_export - total_hauler_holding),
+        );
+
+        let infos: PriorityQueue<_, &mut Info> = self
+            .haulers
+            .values_mut()
+            .map(|info| (info.size, info))
             .collect();
 
-        while let Some((size, (hauler_id, hauler_carrying))) = idle_haulers.pop() {
-            let carriable = size as u32 * CARRY_CAPACITY;
-            let task = if hauler_carrying > 20 {
-                let creep = hauler_id.resolve();
-                let Some(creep) = creep else { continue };
-                let creep_pos = creep.pos();
-                let idx = pending_import
+        // dispatch task for haulers without a task
+        for (_, info) in infos {
+            if info.task.is_some() {
+                continue;
+            }
+
+            let import_candidate = if import_requested > 0 {
+                self.imports
                     .iter()
                     .enumerate()
-                    .max_by_key(|(_, (_, pos, priority, _))| {
-                        (*priority, Reverse(pos.get_range_to(creep_pos)))
+                    .filter_map(|(idx, import)| {
+                        let amount = min(import.amount, info.used_capacity);
+                        if amount != 0 {
+                            let distance = import.pos.get_range_to(info.pos);
+                            Some((idx, (import.priority, Fraction(amount, distance))))
+                        } else {
+                            None
+                        }
                     })
-                    .map(|(idx, _)| idx);
-                let Some(idx) = idx else { break };
-                let (import_id, pos, priority, amount) = pending_import.swap_remove(idx);
-                if hauler_carrying < amount {
-                    pending_import.push((import_id, pos, priority, amount - hauler_carrying));
-                }
-                Task::Supply(import_id)
+                    .max_by_key(|(_, score)| *score)
             } else {
-                let Some(((priority, energy), export_id)) = pending_export.pop() else {
-                    break;
-                };
-                if carriable < energy {
-                    pending_export.push((priority, energy - carriable), export_id);
-                }
-                Task::Pickup(export_id)
+                None
             };
-            self.haulers.get_mut(&hauler_id).unwrap().task = Some(task);
+
+            let export_candidate = if export_requested > 0 {
+                self.exports
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(idx, export)| {
+                        let amount = min(export.amount, info.free_capacity);
+                        if amount != 0 {
+                            let distance = export.pos.get_range_to(info.pos);
+                            Some((idx, (export.priority, Fraction(amount, distance))))
+                        } else {
+                            None
+                        }
+                    })
+                    .max_by_key(|(_, score)| *score)
+            } else {
+                None
+            };
+
+            let task = match (import_candidate, export_candidate) {
+                (Some((id, im)), ex) if ex.is_none_or(|(_, ex)| im > ex) => {
+                    let mut import = self.imports.swap_remove(id);
+                    let id = import.target.id();
+                    let amount = min(import.amount, info.used_capacity);
+                    import_requested -= amount;
+                    import.amount -= amount;
+                    if import.amount > 0 {
+                        self.imports.push(import);
+                    }
+                    Task::Supply(id)
+                }
+                (_, Some((id, _))) => {
+                    let mut export = self.exports.swap_remove(id);
+                    let id = export.target.id();
+                    let amount = min(export.amount, info.free_capacity);
+                    export_requested -= amount;
+                    export.amount -= amount;
+                    if export.amount > 0 {
+                        self.exports.push(export);
+                    }
+                    Task::Pickup(id)
+                }
+                (None, None) => break,
+                (Some(_), None) => unreachable(),
+            };
+
+            info.task = Some(task);
         }
     }
 

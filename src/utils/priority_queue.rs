@@ -41,12 +41,34 @@ impl<K: Ord, V> FromIterator<(K, V)> for PriorityQueue<K, V> {
 }
 
 impl<K: Ord, V> PriorityQueue<K, V> {
+    #[allow(unused)]
     pub fn push(&mut self, key: K, value: V) {
         self.heap.push(KeyCmp { key, value });
     }
 
+    #[allow(unused)]
     pub fn pop(&mut self) -> Option<(K, V)> {
         let KeyCmp { key, value } = self.heap.pop()?;
+        Some((key, value))
+    }
+}
+
+impl<K: Ord, V> IntoIterator for PriorityQueue<K, V> {
+    type Item = (K, V);
+    type IntoIter = PqIter<K, V>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        PqIter(self.heap.into_iter())
+    }
+}
+
+pub struct PqIter<K: Ord, V>(<BinaryHeap<KeyCmp<K, V>> as IntoIterator>::IntoIter);
+
+impl<K: Ord, V> Iterator for PqIter<K, V> {
+    type Item = (K, V);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let KeyCmp { key, value } = self.0.next()?;
         Some((key, value))
     }
 }
