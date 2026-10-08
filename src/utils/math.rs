@@ -1,32 +1,5 @@
-use std::cmp::Ordering;
 use std::f64::consts::FRAC_1_PI;
 use std::f64::consts::PI;
-
-/// Associates an un-compared value with a compared key, intended for use in `BinaryHeap`
-pub struct KeyCmp<K: Ord, V> {
-    pub key: K,
-    pub value: V,
-}
-
-impl<K: Ord, V> PartialEq for KeyCmp<K, V> {
-    fn eq(&self, other: &Self) -> bool {
-        self.key.eq(&other.key)
-    }
-}
-
-impl<K: Ord, V> Eq for KeyCmp<K, V> {}
-
-impl<K: Ord, V> PartialOrd for KeyCmp<K, V> {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl<K: Ord, V> Ord for KeyCmp<K, V> {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.key.cmp(&other.key)
-    }
-}
 
 // START OF const-evaluable sin function
 // Source: https://gist.github.com/sug0/b5eb2c58be74f7cda230b8c1e1994670

@@ -1,5 +1,4 @@
 use std::cmp::Reverse;
-use std::collections::BinaryHeap;
 use std::collections::HashMap;
 use std::collections::HashSet;
 
@@ -19,7 +18,7 @@ use screeps::StructureTower;
 use screeps::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::utils::KeyCmp;
+use crate::utils::PriorityQueue;
 
 pub struct TransportAllocator {
     haulers: HashMap<ObjectId<Creep>, Info>,
@@ -101,15 +100,12 @@ impl TransportAllocator {
 
     pub fn allocate(&mut self) {
         let being_served: HashSet<_> = self.haulers.values().filter_map(|info| info.task).collect();
-        let mut pending_export: BinaryHeap<_> = self
+        let mut pending_export: PriorityQueue<_, _> = self
             .exports
             .iter()
             .map(|info| (info.target.id(), info))
             .filter(|(id, _)| !being_served.contains(&Task::Pickup(*id)))
-            .map(|(id, info)| KeyCmp {
-                key: (info.priority, info.amount),
-                value: id,
-            })
+            .map(|(id, info)| ((info.priority, info.amount), id))
             .collect();
         let mut pending_import: Vec<_> = self
             .imports
@@ -118,21 +114,14 @@ impl TransportAllocator {
             .filter(|(id, _)| !being_served.contains(&Task::Supply(*id)))
             .map(|(id, info)| (id, info.target.pos(), info.priority, info.amount))
             .collect();
-        let mut idle_haulers: BinaryHeap<_> = self
+        let mut idle_haulers: PriorityQueue<_, _> = self
             .haulers
             .iter()
             .filter(|(_, info)| info.task.is_none())
-            .map(|(creep_id, info)| KeyCmp {
-                key: info.size,
-                value: (*creep_id, info.carrying),
-            })
+            .map(|(creep_id, info)| (info.size, (*creep_id, info.carrying)))
             .collect();
 
-        while let Some(KeyCmp {
-            key: size,
-            value: (hauler_id, hauler_carrying),
-        }) = idle_haulers.pop()
-        {
+        while let Some((size, (hauler_id, hauler_carrying))) = idle_haulers.pop() {
             let carriable = size as u32 * CARRY_CAPACITY;
             let task = if hauler_carrying > 20 {
                 let creep = hauler_id.resolve();
@@ -152,18 +141,11 @@ impl TransportAllocator {
                 }
                 Task::Supply(import_id)
             } else {
-                let Some(KeyCmp {
-                    key: (priority, energy),
-                    value: export_id,
-                }) = pending_export.pop()
-                else {
+                let Some(((priority, energy), export_id)) = pending_export.pop() else {
                     break;
                 };
                 if carriable < energy {
-                    pending_export.push(KeyCmp {
-                        key: (priority, energy - carriable),
-                        value: export_id,
-                    });
+                    pending_export.push((priority, energy - carriable), export_id);
                 }
                 Task::Pickup(export_id)
             };
