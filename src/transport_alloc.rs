@@ -151,10 +151,16 @@ impl TransportAllocator {
             .sum();
 
         let network_cap = min(total_import, total_export);
-        let mut export_requested = min(network_cap, max(active_import, active_export));
+        let mut export_requested = min(
+            network_cap,
+            max(
+                active_import.saturating_sub(total_hauler_holding),
+                active_export,
+            ),
+        );
         let mut import_requested = min(
             network_cap,
-            max(active_import, active_export - total_hauler_holding),
+            max(active_import, active_export + total_hauler_holding),
         );
 
         let infos: PriorityQueue<_, &mut Info> = self
