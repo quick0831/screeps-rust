@@ -83,7 +83,6 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
 
     let creep_mems: Vec<(Creep, Role)> = game::creeps()
         .values()
-        .filter(|creep| !creep.spawning())
         .filter_map(|creep| from_value(creep.memory()).ok().map(|mem| (creep, mem)))
         .collect();
 

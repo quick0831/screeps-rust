@@ -60,6 +60,9 @@ impl TransportAllocator {
     }
 
     pub fn register_hauler(&mut self, creep: &Creep, task: Option<Task>) {
+        if creep.spawning() {
+            return;
+        }
         let Some(creep_id) = creep.try_id() else {
             return;
         };
