@@ -52,7 +52,7 @@ impl Harvester {
 }
 
 impl RoleTrait for Harvester {
-    fn register(&self, creep: &Creep, d: &mut SharedData) {
+    fn register(&mut self, creep: &Creep, d: &mut SharedData) {
         d.source_alloc.register_harvester(creep, self.target);
     }
 

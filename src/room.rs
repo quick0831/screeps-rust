@@ -81,7 +81,7 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
         capacity: room.energy_capacity_available(),
     };
 
-    let creep_mems: Vec<(Creep, Role)> = game::creeps()
+    let mut creep_mems: Vec<(Creep, Role)> = game::creeps()
         .values()
         .filter_map(|creep| from_value(creep.memory()).ok().map(|mem| (creep, mem)))
         .collect();
@@ -128,7 +128,7 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
     }
 
     // Register stage
-    for (creep, memory) in &creep_mems {
+    for (creep, memory) in &mut creep_mems {
         memory.register(creep, &mut d);
     }
 

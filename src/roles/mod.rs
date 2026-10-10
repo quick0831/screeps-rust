@@ -18,7 +18,7 @@ pub use upgrader::Upgrader;
 
 #[enum_dispatch]
 pub trait RoleTrait {
-    fn register(&self, creep: &Creep, d: &mut SharedData);
+    fn register(&mut self, creep: &Creep, d: &mut SharedData);
     fn run(&mut self, creep: &Creep, d: &mut SharedData, room_memory: &mut RoomMemory);
 }
 

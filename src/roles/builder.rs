@@ -2,7 +2,6 @@ use screeps::ConstructionSite;
 use screeps::Creep;
 use screeps::ObjectId;
 use screeps::ResourceType;
-use screeps::StructureType;
 use screeps::action_error_codes::BuildErrorCode;
 use screeps::action_error_codes::WithdrawErrorCode;
 use screeps::find;
@@ -12,15 +11,17 @@ use serde::{Deserialize, Serialize};
 use crate::roles::RoleTrait;
 use crate::room::RoomMemory;
 use crate::room::SharedData;
+use crate::transport_alloc::Task;
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Builder {
     target: Option<ObjectId<ConstructionSite>>,
+    task: Option<Task>,
     state: BuilderState,
 }
 
-#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 enum BuilderState {
     Build,
     Fetch,
@@ -29,9 +30,7 @@ enum BuilderState {
 }
 
 impl RoleTrait for Builder {
-    fn register(&self, _creep: &Creep, _d: &mut SharedData) {}
-
-    fn run(&mut self, creep: &Creep, d: &mut SharedData, _room_memory: &mut RoomMemory) {
+    fn register(&mut self, creep: &Creep, d: &mut SharedData) {
         if creep.store().get(ResourceType::Energy).unwrap_or(0) == 0 {
             let energy_avail = d.room.energy_available();
             let energy_cap = d.room.energy_capacity_available();
@@ -56,9 +55,18 @@ impl RoleTrait for Builder {
             self.state = BuilderState::Build;
             let _ = creep.say("🚧 build", false);
         }
+        if self.state == BuilderState::Fetch {
+            d.transport_alloc.register_creep_import(creep, self.task);
+        }
+    }
 
-        match (self.state, self.target) {
-            (BuilderState::Build, Some(target)) => {
+    fn run(&mut self, creep: &Creep, d: &mut SharedData, _room_memory: &mut RoomMemory) {
+        if self.task.is_none() {
+            self.task = d.transport_alloc.delegate(creep);
+        }
+
+        match (self.state, self.target, self.task) {
+            (BuilderState::Build, Some(target), _) => {
                 if let Some(target) = target.resolve() {
                     if let Err(BuildErrorCode::NotInRange) = creep.build(&target) {
                         d.path_finder.move_to(creep, target.pos(), 3);
@@ -67,36 +75,22 @@ impl RoleTrait for Builder {
                     self.target = None;
                 }
             }
-            (BuilderState::Fetch, Some(_)) => {
-                // grab energy from spawn and extensions
-                let structures = creep.room().unwrap().find(find::MY_STRUCTURES, None);
-                let center = creep.pos();
-                let target = structures
-                    .into_iter()
-                    .filter(|s| {
-                        matches!(
-                            s.structure_type(),
-                            StructureType::Extension | StructureType::Spawn
-                        )
-                    })
-                    .filter(|s| {
-                        s.as_has_store()
-                            .and_then(|s| s.store().get(ResourceType::Energy))
-                            .unwrap_or(0)
-                            > 0
-                    })
-                    .min_by_key(|s| center.get_range_to(s.pos()));
-                if let Some(target) = target
-                    && let Some(withdrawable) = target.as_withdrawable()
-                {
-                    let err = creep.withdraw(withdrawable, ResourceType::Energy, None);
+            (BuilderState::Fetch, Some(_), Some(Task::Pickup(id))) => {
+                if let Some(target) = id.resolve() {
+                    let err = creep.withdraw(&target, ResourceType::Energy, None);
                     if let Err(WithdrawErrorCode::NotInRange) = err {
                         d.path_finder.move_to(creep, target.pos(), 1);
+                    } else {
+                        self.task = None;
                     }
+                } else {
+                    // target failed to resolve, give up task
+                    self.task = None;
                 }
             }
             _ => {
                 d.path_finder.move_away_multi(creep, &d.keepouts);
+                self.task = None;
             }
         }
     }

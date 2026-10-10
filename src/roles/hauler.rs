@@ -17,20 +17,19 @@ pub struct Hauler {
 }
 
 impl RoleTrait for Hauler {
-    fn register(&self, creep: &Creep, d: &mut SharedData) {
-        d.transport_alloc.register_hauler(creep, self.task);
-    }
-
-    fn run(&mut self, creep: &Creep, d: &mut SharedData, _room_memory: &mut RoomMemory) {
+    fn register(&mut self, creep: &Creep, d: &mut SharedData) {
         if creep.ticks_to_live().is_some_and(|ttl| ttl < 50) {
             if creep.store().get_used_capacity(None) == 0 {
                 let _ = creep.suicide();
             } else {
-                // TODO: deposit whatever it is carrying
+                d.transport_alloc.register_creep_export(creep);
             }
-            return;
+        } else {
+            d.transport_alloc.register_hauler(creep, self.task);
         }
+    }
 
+    fn run(&mut self, creep: &Creep, d: &mut SharedData, _room_memory: &mut RoomMemory) {
         if self.task.is_none() {
             self.task = d.transport_alloc.delegate(creep);
         }

@@ -13,9 +13,12 @@ use screeps::RoomObject;
 use screeps::Store;
 use screeps::StructureContainer;
 use screeps::StructureExtension;
+use screeps::StructureObject;
 use screeps::StructureSpawn;
 use screeps::StructureStorage;
 use screeps::StructureTower;
+use screeps::StructureType;
+use screeps::find;
 use screeps::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -85,6 +88,111 @@ impl TransportAllocator {
                 pos,
             },
         );
+    }
+
+    pub fn register_creep_import(&mut self, creep: &Creep, task: Option<Task>) {
+        // TODO: Properly implement dispatcher
+        let creep_id = creep.try_id();
+        let Some(creep_id) = creep_id else { return };
+        if task.is_some() {
+            self.haulers.insert(
+                creep_id,
+                Info {
+                    task,
+                    size: 0,
+                    used_capacity: 0,
+                    free_capacity: 0,
+                    pos: creep.pos(),
+                },
+            );
+            return;
+        }
+        let center = creep.pos();
+        let target = creep
+            .room()
+            .unwrap()
+            .find(find::STRUCTURES, None)
+            .into_iter()
+            .filter(|s| s.structure_type() == StructureType::Container)
+            .filter(|s| {
+                s.as_has_store()
+                    .and_then(|s| s.store().get(ResourceType::Energy))
+                    .unwrap_or(0)
+                    > 0
+            })
+            .inspect(|s| {
+                let r = center.get_range_to(s.pos());
+                log::info!("r = {}, pos = {}, center = {}", r, s.pos(), center);
+            })
+            .min_by_key(|s| center.get_range_to(s.pos()));
+        if let Some(target) = &target {
+            log::info!("pos: {}", target.pos());
+        } else {
+            log::info!("none");
+        }
+        let target = target.as_ref();
+        // grab energy from storage
+        let structures = creep.room().unwrap().find(find::MY_STRUCTURES, None);
+        let target = target.or_else(|| {
+            structures
+                .iter()
+                .filter(|s| s.structure_type() == StructureType::Storage)
+                .filter(|s| {
+                    s.as_has_store()
+                        .and_then(|s| s.store().get(ResourceType::Energy))
+                        .unwrap_or(0)
+                        > 0
+                })
+                .min_by_key(|s| center.get_range_to(s.pos()))
+        });
+        // fall back to withdraw from extensions
+        let target = target.or_else(|| {
+            let room = creep.room()?;
+            let energy_avail = room.energy_available();
+            let energy_cap = room.energy_capacity_available();
+            if energy_avail > 250 && energy_cap - energy_avail < 300 {
+                structures
+                    .iter()
+                    .filter(|s| {
+                        matches!(
+                            s.structure_type(),
+                            StructureType::Extension | StructureType::Spawn
+                        )
+                    })
+                    .filter(|s| {
+                        s.as_has_store()
+                            .and_then(|s| s.store().get(ResourceType::Energy))
+                            .unwrap_or(0)
+                            > 0
+                    })
+                    .min_by_key(|s| center.get_range_to(s.pos()))
+            } else {
+                None
+            }
+        });
+        let Some(target) = target else { return };
+        let export = match target.clone() {
+            StructureObject::StructureSpawn(spawn) => ResourceExport::Spawn(spawn),
+            StructureObject::StructureExtension(extension) => ResourceExport::Extension(extension),
+            StructureObject::StructureStorage(storage) => ResourceExport::Storage(storage),
+            StructureObject::StructureContainer(container) => ResourceExport::Container(container),
+            _ => return,
+        };
+        self.haulers.insert(
+            creep_id,
+            Info {
+                task: Some(Task::Pickup(export.id())),
+                size: 0,
+                used_capacity: 0,
+                free_capacity: 0,
+                pos: creep.pos(),
+            },
+        );
+    }
+
+    pub fn register_creep_export(&mut self, creep: &Creep) {
+        // TODO: deposit whatever it is carrying
+        log::info!("A creep want to deposit: {:?}", creep.pos());
     }
 
     pub fn register_export(&mut self, export: impl Into<ResourceExport>, priority: Priority) {
