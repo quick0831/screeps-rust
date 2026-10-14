@@ -1,6 +1,8 @@
+use std::cmp::min;
+
 use screeps::ResourceType;
+use screeps::StructureObject;
 use screeps::StructureTower;
-use screeps::StructureType;
 use screeps::TOWER_CAPACITY;
 use screeps::find;
 use screeps::prelude::*;
@@ -30,9 +32,11 @@ pub fn run(tower: StructureTower, d: &mut SharedData) {
         .find(find::STRUCTURES, None)
         .into_iter()
         .filter(|s| {
-            if s.structure_type() == StructureType::Wall {
+            if let StructureObject::StructureWall(_) = s {
                 // avoid fixing nearby walls (too hard to fill 300M hp)
                 false
+            } else if let StructureObject::StructureRampart(s) = s {
+                s.hits() < min(25_000_000, (s.hits_max() as f32 * 0.9) as u32)
             } else if let Some(repairable) = s.as_repairable() {
                 (repairable.hits() as f32 / repairable.hits_max() as f32) < 0.9
             } else {
