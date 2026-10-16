@@ -9,6 +9,7 @@ use screeps::prelude::*;
 
 use crate::room::SharedData;
 use crate::transport_alloc::Priority;
+use crate::utils::Fraction;
 
 const ENERGY_THRESHOLD: u32 = (TOWER_CAPACITY as f64 * 0.8) as u32;
 
@@ -38,12 +39,24 @@ pub fn run(tower: StructureTower, d: &mut SharedData) {
             } else if let StructureObject::StructureRampart(s) = s {
                 s.hits() < min(25_000_000, (s.hits_max() as f32 * 0.9) as u32)
             } else if let Some(repairable) = s.as_repairable() {
-                (repairable.hits() as f32 / repairable.hits_max() as f32) < 0.9
+                Fraction(repairable.hits(), repairable.hits_max()) < Fraction(9, 10)
             } else {
                 false
             }
         })
-        .min_by_key(|s| center.get_range_to(s.pos()));
+        .min_by_key(|s| {
+            (
+                s.as_repairable().and_then(|repairable| {
+                    let hit_ratio = Fraction(repairable.hits(), repairable.hits_max());
+                    if hit_ratio < Fraction(1, 20) {
+                        Some(hit_ratio)
+                    } else {
+                        None
+                    }
+                }),
+                center.get_range_to(s.pos()),
+            )
+        });
 
     if let Some(structure) = nearest_damaged_structures
         && let Some(repairable) = structure.as_repairable()
