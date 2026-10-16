@@ -13,12 +13,9 @@ use screeps::RoomObject;
 use screeps::Store;
 use screeps::StructureContainer;
 use screeps::StructureExtension;
-use screeps::StructureObject;
 use screeps::StructureSpawn;
 use screeps::StructureStorage;
 use screeps::StructureTower;
-use screeps::StructureType;
-use screeps::find;
 use screeps::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -27,6 +24,7 @@ use crate::utils::PriorityQueue;
 
 pub struct TransportAllocator {
     haulers: HashMap<ObjectId<Creep>, Info>,
+    creep_imports: HashMap<ObjectId<Creep>, Info>,
     imports: Vec<ImportInfo>,
     exports: Vec<ExportInfo>,
 }
@@ -57,6 +55,7 @@ impl TransportAllocator {
     pub fn new() -> Self {
         TransportAllocator {
             haulers: HashMap::new(),
+            creep_imports: HashMap::new(),
             imports: Vec::new(),
             exports: Vec::new(),
         }
@@ -91,108 +90,35 @@ impl TransportAllocator {
     }
 
     pub fn register_creep_import(&mut self, creep: &Creep, task: Option<Task>) {
-        // TODO: Properly implement dispatcher
-        let creep_id = creep.try_id();
-        let Some(creep_id) = creep_id else { return };
-        if task.is_some() {
-            self.haulers.insert(
-                creep_id,
-                Info {
-                    task,
-                    size: 0,
-                    used_capacity: 0,
-                    free_capacity: 0,
-                    pos: creep.pos(),
-                },
-            );
+        if creep.spawning() {
             return;
         }
-        let center = creep.pos();
-        let target = creep
-            .room()
-            .unwrap()
-            .find(find::STRUCTURES, None)
+        let creep_id = creep.try_id();
+        let Some(creep_id) = creep_id else { return };
+        let size = creep
+            .body()
             .into_iter()
-            .filter(|s| s.structure_type() == StructureType::Container)
-            .filter(|s| {
-                s.as_has_store()
-                    .and_then(|s| s.store().get(ResourceType::Energy))
-                    .unwrap_or(0)
-                    > 0
-            })
-            .inspect(|s| {
-                let r = center.get_range_to(s.pos());
-                log::info!("r = {}, pos = {}, center = {}", r, s.pos(), center);
-            })
-            .min_by_key(|s| center.get_range_to(s.pos()));
-        if let Some(target) = &target {
-            log::info!("pos: {}", target.pos());
-        } else {
-            log::info!("none");
-        }
-        let target = target.as_ref();
-        // grab energy from storage
-        let structures = creep.room().unwrap().find(find::MY_STRUCTURES, None);
-        let target = target.or_else(|| {
-            structures
-                .iter()
-                .filter(|s| s.structure_type() == StructureType::Storage)
-                .filter(|s| {
-                    s.as_has_store()
-                        .and_then(|s| s.store().get(ResourceType::Energy))
-                        .unwrap_or(0)
-                        > 0
-                })
-                .min_by_key(|s| center.get_range_to(s.pos()))
-        });
-        // fall back to withdraw from extensions
-        let target = target.or_else(|| {
-            let room = creep.room()?;
-            let energy_avail = room.energy_available();
-            let energy_cap = room.energy_capacity_available();
-            if energy_avail > 250 && energy_cap - energy_avail < 300 {
-                structures
-                    .iter()
-                    .filter(|s| {
-                        matches!(
-                            s.structure_type(),
-                            StructureType::Extension | StructureType::Spawn
-                        )
-                    })
-                    .filter(|s| {
-                        s.as_has_store()
-                            .and_then(|s| s.store().get(ResourceType::Energy))
-                            .unwrap_or(0)
-                            > 0
-                    })
-                    .min_by_key(|s| center.get_range_to(s.pos()))
-            } else {
-                None
-            }
-        });
-        let Some(target) = target else { return };
-        let export = match target.clone() {
-            StructureObject::StructureSpawn(spawn) => ResourceExport::Spawn(spawn),
-            StructureObject::StructureExtension(extension) => ResourceExport::Extension(extension),
-            StructureObject::StructureStorage(storage) => ResourceExport::Storage(storage),
-            StructureObject::StructureContainer(container) => ResourceExport::Container(container),
-            _ => return,
-        };
-        self.haulers.insert(
+            .map(|p| p.part())
+            .filter(|p| *p == Part::Work)
+            .count() as u8;
+        let used_capacity = creep.store().get_used_capacity(None);
+        let free_capacity = creep.store().get_free_capacity(None) as u32;
+        let pos = creep.pos();
+        self.creep_imports.insert(
             creep_id,
             Info {
-                task: Some(Task::Pickup(export.id())),
-                size: 0,
-                used_capacity: 0,
-                free_capacity: 0,
-                pos: creep.pos(),
+                task,
+                size,
+                used_capacity,
+                free_capacity,
+                pos,
             },
         );
     }
 
     pub fn register_creep_export(&mut self, creep: &Creep) {
         // TODO: deposit whatever it is carrying
-        log::info!("A creep want to deposit: {:?}", creep.pos());
+        let _ = creep;
     }
 
     pub fn register_export(&mut self, export: impl Into<ResourceExport>, priority: Priority) {
@@ -225,7 +151,7 @@ impl TransportAllocator {
 
     pub fn allocate(&mut self) {
         // Remove corresponded amount already queued
-        for info in self.haulers.values() {
+        for info in self.haulers.values().chain(self.creep_imports.values()) {
             let Some(task) = info.task else { continue };
             match task {
                 Task::Pickup(id) => {
@@ -245,8 +171,10 @@ impl TransportAllocator {
         self.imports.retain(|info| info.amount > 0);
 
         // calculate needed network flow
+        let creep_import_amount: u32 = self.creep_imports.values().map(|i| i.free_capacity).sum();
         let total_import: u32 = self.imports.iter().map(|info| info.amount).sum();
         let total_export: u32 = self.exports.iter().map(|info| info.amount).sum();
+        let total_export = total_export + creep_import_amount;
         let total_hauler_holding: u32 = self.haulers.values().map(|info| info.used_capacity).sum();
         let active_import: u32 = self
             .imports
@@ -260,6 +188,7 @@ impl TransportAllocator {
             .filter(|info| info.priority != Priority::Passive)
             .map(|info| info.amount)
             .sum();
+        let active_export = active_export + creep_import_amount;
 
         let network_cap = min(total_import, total_export);
         let mut export_requested = min(
@@ -274,19 +203,25 @@ impl TransportAllocator {
             max(active_import, active_export + total_hauler_holding),
         );
 
-        let infos: PriorityQueue<_, &mut Info> = self
+        let creep_import_infos: PriorityQueue<_, (&mut Info, bool)> = self
+            .creep_imports
+            .values_mut()
+            .map(|info| (info.size, (info, false)))
+            .collect();
+
+        let hauler_infos: PriorityQueue<_, (&mut Info, bool)> = self
             .haulers
             .values_mut()
-            .map(|info| (info.size, info))
+            .map(|info| (info.size, (info, true)))
             .collect();
 
         // dispatch task for haulers without a task
-        for (_, info) in infos {
+        for (_, (info, can_import)) in creep_import_infos.into_iter().chain(hauler_infos) {
             if info.task.is_some() {
                 continue;
             }
 
-            let import_candidate = if import_requested > 0 {
+            let import_candidate = if can_import && import_requested > 0 {
                 self.imports
                     .iter()
                     .enumerate()
@@ -345,7 +280,7 @@ impl TransportAllocator {
                     }
                     Task::Pickup(id)
                 }
-                (None, None) => break,
+                (None, None) => continue,
                 (Some(_), None) => unreachable(),
             };
 
@@ -354,8 +289,10 @@ impl TransportAllocator {
     }
 
     pub fn delegate(&self, creep: &Creep) -> Option<Task> {
+        let creep_id = creep.try_id()?;
         self.haulers
-            .get(&creep.try_id()?)
+            .get(&creep_id)
+            .or_else(|| self.creep_imports.get(&creep_id))
             .and_then(|info| info.task)
     }
 }
