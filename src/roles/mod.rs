@@ -3,6 +3,7 @@ use screeps::Creep;
 use serde::{Deserialize, Serialize};
 use strum::EnumDiscriminants;
 
+use crate::path_finder::PathFinder;
 use crate::room::RoomMemory;
 use crate::room::SharedData;
 
@@ -19,7 +20,13 @@ pub use upgrader::Upgrader;
 #[enum_dispatch]
 pub trait RoleTrait {
     fn register(&mut self, creep: &Creep, d: &mut SharedData);
-    fn run(&mut self, creep: &Creep, d: &mut SharedData, room_memory: &mut RoomMemory);
+    fn run(
+        &mut self,
+        creep: &Creep,
+        d: &mut SharedData,
+        room_memory: &mut RoomMemory,
+        path_finder: &mut PathFinder,
+    );
 }
 
 #[enum_dispatch(RoleTrait)]

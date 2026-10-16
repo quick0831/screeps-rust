@@ -13,6 +13,7 @@ use screeps::action_error_codes::TransferErrorCode;
 use screeps::prelude::*;
 use serde::{Deserialize, Serialize};
 
+use crate::path_finder::PathFinder;
 use crate::roles::RoleTrait;
 use crate::room::RoomMemory;
 use crate::room::SharedData;
@@ -56,7 +57,13 @@ impl RoleTrait for Harvester {
         d.source_alloc.register_harvester(creep, self.target);
     }
 
-    fn run(&mut self, creep: &Creep, d: &mut SharedData, room_memory: &mut RoomMemory) {
+    fn run(
+        &mut self,
+        creep: &Creep,
+        d: &mut SharedData,
+        room_memory: &mut RoomMemory,
+        path_finder: &mut PathFinder,
+    ) {
         let Some(target) = self.target.resolve() else {
             return;
         };
@@ -87,7 +94,7 @@ impl RoleTrait for Harvester {
                             self.state = HarvesterState::Stall;
                         }
                         if let Err(TransferErrorCode::NotInRange) = err {
-                            d.path_finder.move_to(creep, &container, 1);
+                            path_finder.move_to(creep, &container, 1);
                         }
                     }
                 }
@@ -108,7 +115,7 @@ impl RoleTrait for Harvester {
             HarvesterState::Harvest => {
                 let err = creep.harvest(&target);
                 if let Err(HarvestErrorCode::NotInRange) = err {
-                    d.path_finder.move_to(creep, &target, 1);
+                    path_finder.move_to(creep, &target, 1);
                 } else if err.is_ok() {
                     let size = creep
                         .body()
@@ -127,7 +134,7 @@ impl RoleTrait for Harvester {
                 };
                 let err = creep.repair(&container);
                 if let Err(CreepRepairErrorCode::NotInRange) = err {
-                    d.path_finder.move_to(creep, &container, 3);
+                    path_finder.move_to(creep, &container, 3);
                 }
             }
             HarvesterState::Build => {
@@ -137,7 +144,7 @@ impl RoleTrait for Harvester {
                 };
                 let err = creep.build(&site);
                 if let Err(BuildErrorCode::NotInRange) = err {
-                    d.path_finder.move_to(creep, &site, 3);
+                    path_finder.move_to(creep, &site, 3);
                 }
             }
             HarvesterState::Stall => {}

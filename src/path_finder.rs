@@ -105,7 +105,7 @@ impl PathFinder {
         r.0 = PathType::MoveAwayMulti(goals);
     }
 
-    pub fn process_movements(&mut self) {
+    pub fn process_movements(mut self) {
         let stasis_creeps: Vec<_> = self
             .creeps
             .iter()

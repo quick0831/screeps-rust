@@ -5,6 +5,7 @@ use screeps::action_error_codes::WithdrawErrorCode;
 use screeps::prelude::*;
 use serde::{Deserialize, Serialize};
 
+use crate::path_finder::PathFinder;
 use crate::roles::RoleTrait;
 use crate::room::RoomMemory;
 use crate::room::SharedData;
@@ -29,7 +30,13 @@ impl RoleTrait for Hauler {
         }
     }
 
-    fn run(&mut self, creep: &Creep, d: &mut SharedData, _room_memory: &mut RoomMemory) {
+    fn run(
+        &mut self,
+        creep: &Creep,
+        d: &mut SharedData,
+        _room_memory: &mut RoomMemory,
+        path_finder: &mut PathFinder,
+    ) {
         if self.task.is_none() {
             self.task = d.transport_alloc.delegate(creep);
         }
@@ -39,7 +46,7 @@ impl RoleTrait for Hauler {
                 if let Some(target) = id.resolve() {
                     let err = creep.withdraw(&target, ResourceType::Energy, None);
                     if let Err(WithdrawErrorCode::NotInRange) = err {
-                        d.path_finder.move_to(creep, target.pos(), 1);
+                        path_finder.move_to(creep, target.pos(), 1);
                     } else {
                         self.task = None;
                     }
@@ -52,7 +59,7 @@ impl RoleTrait for Hauler {
                 if let Some(target) = id.resolve() {
                     let err = creep.transfer(&target, ResourceType::Energy, None);
                     if let Err(TransferErrorCode::NotInRange) = err {
-                        d.path_finder.move_to(creep, target.pos(), 1);
+                        path_finder.move_to(creep, target.pos(), 1);
                     } else {
                         self.task = None;
                     }
@@ -63,7 +70,7 @@ impl RoleTrait for Hauler {
             }
             None => {
                 // No task available, enter idle state
-                d.path_finder.move_away_multi(creep, &d.keepouts);
+                path_finder.move_away_multi(creep, &d.keepouts);
             }
         }
     }

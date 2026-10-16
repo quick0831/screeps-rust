@@ -45,7 +45,6 @@ pub struct SharedData {
     pub transport_alloc: TransportAllocator,
     pub role_count: RoleCount,
     pub energy: EnergyStatus,
-    pub path_finder: PathFinder,
     pub keepouts: Vec<SearchGoal>,
 }
 
@@ -86,8 +85,6 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
         .filter_map(|creep| from_value(creep.memory()).ok().map(|mem| (creep, mem)))
         .collect();
 
-    let path_finder = PathFinder::new(creep_mems.iter().map(|(creep, _)| creep));
-
     let mut keepouts = Vec::new();
     for spawn in &spawns {
         keepouts.push(SearchGoal::new(spawn.pos(), 7));
@@ -104,7 +101,6 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
         transport_alloc,
         role_count,
         energy,
-        path_finder,
         keepouts,
     };
 
@@ -182,14 +178,17 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
     // Allocation stage
     d.transport_alloc.allocate();
 
+    let mut path_finder = PathFinder::new(creep_mems.iter().map(|(creep, _)| creep));
+
     // Execute stage
     for (creep, mut memory) in creep_mems {
-        memory.run(&creep, &mut d, &mut room_memory);
+        memory.run(&creep, &mut d, &mut room_memory, &mut path_finder);
 
         creep.set_memory(&to_value(&memory).expect("Failed to serialize memory"));
     }
 
-    d.path_finder.process_movements();
+    // Path find stage
+    path_finder.process_movements();
 
     process_spawning(&d);
 
