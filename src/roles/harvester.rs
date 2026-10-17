@@ -18,6 +18,8 @@ use crate::roles::RoleTrait;
 use crate::room::RoomMemory;
 use crate::room::SharedData;
 use crate::source::ContainerInfo;
+use crate::transport_alloc::TransportAllocation;
+use crate::transport_alloc::TransportAllocator;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Harvester {
@@ -53,7 +55,7 @@ impl Harvester {
 }
 
 impl RoleTrait for Harvester {
-    fn register(&mut self, creep: &Creep, d: &mut SharedData) {
+    fn register(&mut self, creep: &Creep, d: &mut SharedData, _transport: &mut TransportAllocator) {
         d.source_alloc.register_harvester(creep, self.target);
     }
 
@@ -63,6 +65,7 @@ impl RoleTrait for Harvester {
         d: &mut SharedData,
         room_memory: &mut RoomMemory,
         path_finder: &mut PathFinder,
+        _transport: &TransportAllocation,
     ) {
         let Some(target) = self.target.resolve() else {
             return;

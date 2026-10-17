@@ -6,6 +6,8 @@ use strum::EnumDiscriminants;
 use crate::path_finder::PathFinder;
 use crate::room::RoomMemory;
 use crate::room::SharedData;
+use crate::transport_alloc::TransportAllocation;
+use crate::transport_alloc::TransportAllocator;
 
 mod builder;
 mod harvester;
@@ -19,13 +21,14 @@ pub use upgrader::Upgrader;
 
 #[enum_dispatch]
 pub trait RoleTrait {
-    fn register(&mut self, creep: &Creep, d: &mut SharedData);
+    fn register(&mut self, creep: &Creep, d: &mut SharedData, transport: &mut TransportAllocator);
     fn run(
         &mut self,
         creep: &Creep,
         d: &mut SharedData,
         room_memory: &mut RoomMemory,
         path_finder: &mut PathFinder,
+        transport: &TransportAllocation,
     );
 }
 

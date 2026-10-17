@@ -9,17 +9,22 @@ use crate::path_finder::PathFinder;
 use crate::roles::RoleTrait;
 use crate::room::RoomMemory;
 use crate::room::SharedData;
+use crate::transport_alloc::ImportTaskHandle;
 use crate::transport_alloc::Task;
+use crate::transport_alloc::TransportAllocation;
+use crate::transport_alloc::TransportAllocator;
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Upgrader {
     upgrading: bool,
     task: Option<Task>,
+    #[serde(skip)]
+    task_handle: Option<ImportTaskHandle>,
 }
 
 impl RoleTrait for Upgrader {
-    fn register(&mut self, creep: &Creep, d: &mut SharedData) {
+    fn register(&mut self, creep: &Creep, _d: &mut SharedData, transport: &mut TransportAllocator) {
         if creep.store().get(ResourceType::Energy).unwrap_or(0) == 0 {
             self.upgrading = false;
             let _ = creep.say("🫳 fetch", false);
@@ -30,7 +35,7 @@ impl RoleTrait for Upgrader {
             let _ = creep.say("⚡ upgrade", false);
         }
         if !self.upgrading {
-            d.transport_alloc.register_creep_import(creep, self.task);
+            self.task_handle = Some(transport.register_creep_import(creep, self.task));
         }
     }
 
@@ -40,9 +45,12 @@ impl RoleTrait for Upgrader {
         d: &mut SharedData,
         _room_memory: &mut RoomMemory,
         path_finder: &mut PathFinder,
+        transport: &TransportAllocation,
     ) {
-        if self.task.is_none() {
-            self.task = d.transport_alloc.delegate(creep);
+        if self.task.is_none()
+            && let Some(handle) = &self.task_handle
+        {
+            self.task = handle.resolve(transport);
         }
 
         if self.upgrading {

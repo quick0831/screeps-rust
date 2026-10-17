@@ -12,7 +12,10 @@ use crate::path_finder::PathFinder;
 use crate::roles::RoleTrait;
 use crate::room::RoomMemory;
 use crate::room::SharedData;
+use crate::transport_alloc::ImportTaskHandle;
 use crate::transport_alloc::Task;
+use crate::transport_alloc::TransportAllocation;
+use crate::transport_alloc::TransportAllocator;
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
@@ -20,6 +23,8 @@ pub struct Builder {
     target: Option<ObjectId<ConstructionSite>>,
     task: Option<Task>,
     state: BuilderState,
+    #[serde(skip)]
+    task_handle: Option<ImportTaskHandle>,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -31,7 +36,7 @@ enum BuilderState {
 }
 
 impl RoleTrait for Builder {
-    fn register(&mut self, creep: &Creep, d: &mut SharedData) {
+    fn register(&mut self, creep: &Creep, d: &mut SharedData, transport: &mut TransportAllocator) {
         if creep.store().get(ResourceType::Energy).unwrap_or(0) == 0 {
             let energy_avail = d.room.energy_available();
             let energy_cap = d.room.energy_capacity_available();
@@ -57,7 +62,7 @@ impl RoleTrait for Builder {
             let _ = creep.say("🚧 build", false);
         }
         if self.state == BuilderState::Fetch {
-            d.transport_alloc.register_creep_import(creep, self.task);
+            self.task_handle = Some(transport.register_creep_import(creep, self.task));
         }
     }
 
@@ -67,9 +72,12 @@ impl RoleTrait for Builder {
         d: &mut SharedData,
         _room_memory: &mut RoomMemory,
         path_finder: &mut PathFinder,
+        transport: &TransportAllocation,
     ) {
-        if self.task.is_none() {
-            self.task = d.transport_alloc.delegate(creep);
+        if self.task.is_none()
+            && let Some(handle) = &self.task_handle
+        {
+            self.task = handle.resolve(transport);
         }
 
         match (self.state, self.target, self.task) {

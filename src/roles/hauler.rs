@@ -9,24 +9,29 @@ use crate::path_finder::PathFinder;
 use crate::roles::RoleTrait;
 use crate::room::RoomMemory;
 use crate::room::SharedData;
+use crate::transport_alloc::HaulerTaskHandle;
 use crate::transport_alloc::Task;
+use crate::transport_alloc::TransportAllocation;
+use crate::transport_alloc::TransportAllocator;
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Hauler {
     task: Option<Task>,
+    #[serde(skip)]
+    task_handle: Option<HaulerTaskHandle>,
 }
 
 impl RoleTrait for Hauler {
-    fn register(&mut self, creep: &Creep, d: &mut SharedData) {
+    fn register(&mut self, creep: &Creep, _d: &mut SharedData, transport: &mut TransportAllocator) {
         if creep.ticks_to_live().is_some_and(|ttl| ttl < 50) {
             if creep.store().get_used_capacity(None) == 0 {
                 let _ = creep.suicide();
             } else {
-                d.transport_alloc.register_creep_export(creep);
+                // self.task_handle = Some(transport.register_creep_export(creep));
             }
         } else {
-            d.transport_alloc.register_hauler(creep, self.task);
+            self.task_handle = Some(transport.register_hauler(creep, self.task));
         }
     }
 
@@ -36,9 +41,12 @@ impl RoleTrait for Hauler {
         d: &mut SharedData,
         _room_memory: &mut RoomMemory,
         path_finder: &mut PathFinder,
+        transport: &TransportAllocation,
     ) {
-        if self.task.is_none() {
-            self.task = d.transport_alloc.delegate(creep);
+        if self.task.is_none()
+            && let Some(handle) = &self.task_handle
+        {
+            self.task = handle.resolve(transport);
         }
 
         match self.task {

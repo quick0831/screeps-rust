@@ -42,7 +42,6 @@ pub struct SharedData {
     pub room: Room,
     pub sources: Vec<SourceInfo>,
     pub source_alloc: SourceAllocator,
-    pub transport_alloc: TransportAllocator,
     pub role_count: RoleCount,
     pub energy: EnergyStatus,
     pub keepouts: Vec<SearchGoal>,
@@ -73,7 +72,6 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
         .map(|s| ananlyze_source(s, &room))
         .collect();
     let source_alloc = SourceAllocator::new(&sources);
-    let transport_alloc = TransportAllocator::new();
     let role_count = RoleCount::default();
     let energy = EnergyStatus {
         available: room.energy_available(),
@@ -98,11 +96,12 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
         room,
         sources,
         source_alloc,
-        transport_alloc,
         role_count,
         energy,
         keepouts,
     };
+
+    let mut transport = TransportAllocator::new();
 
     put_containers(&d);
 
@@ -112,7 +111,7 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
         .iter()
         .cloned()
         .filter_map(|s| -> Option<StructureTower> { s.try_into().ok() })
-        .for_each(|tower| tower::run(tower, &mut d));
+        .for_each(|tower| tower::run(tower, &mut transport));
 
     for (_, memory) in &creep_mems {
         match memory.discriminant() {
@@ -125,7 +124,7 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
 
     // Register stage
     for (creep, memory) in &mut creep_mems {
-        memory.register(creep, &mut d);
+        memory.register(creep, &mut d, &mut transport);
     }
 
     // Add source containers as exporters
@@ -137,7 +136,7 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
         })
         .filter_map(|id| id.resolve())
         .filter(|c| c.store().get(ResourceType::Energy).unwrap_or(0) > 0)
-        .for_each(|c| d.transport_alloc.register_export(c, Priority::High));
+        .for_each(|c| transport.register_export(c, Priority::High));
 
     let storage: Option<StructureStorage> = my_structures
         .iter()
@@ -145,9 +144,8 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
         .find_map(|s| s.try_into().ok());
     let no_storage = storage.is_none();
     if let Some(s) = storage {
-        d.transport_alloc
-            .register_import(s.clone(), Priority::Passive);
-        d.transport_alloc.register_export(s, Priority::Passive);
+        transport.register_import(s.clone(), Priority::Passive);
+        transport.register_export(s, Priority::Passive);
     }
 
     d.spawns
@@ -156,10 +154,9 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
         .cloned()
         .for_each(|s| {
             if no_storage {
-                d.transport_alloc
-                    .register_export(s.clone(), Priority::Passive);
+                transport.register_export(s.clone(), Priority::Passive);
             }
-            d.transport_alloc.register_import(s, Priority::High);
+            transport.register_import(s, Priority::High);
         });
 
     my_structures
@@ -169,20 +166,25 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
         .filter(|s| s.store().get_free_capacity(Some(ResourceType::Energy)) > 0)
         .for_each(|s| {
             if no_storage {
-                d.transport_alloc
-                    .register_export(s.clone(), Priority::Passive);
+                transport.register_export(s.clone(), Priority::Passive);
             }
-            d.transport_alloc.register_import(s, Priority::High);
+            transport.register_import(s, Priority::High);
         });
 
     // Allocation stage
-    d.transport_alloc.allocate();
+    let transport = transport.allocate();
 
     let mut path_finder = PathFinder::new(creep_mems.iter().map(|(creep, _)| creep));
 
     // Execute stage
     for (creep, mut memory) in creep_mems {
-        memory.run(&creep, &mut d, &mut room_memory, &mut path_finder);
+        memory.run(
+            &creep,
+            &mut d,
+            &mut room_memory,
+            &mut path_finder,
+            &transport,
+        );
 
         creep.set_memory(&to_value(&memory).expect("Failed to serialize memory"));
     }

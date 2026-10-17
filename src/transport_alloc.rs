@@ -1,7 +1,6 @@
 use std::arch::wasm32::unreachable;
 use std::cmp::max;
 use std::cmp::min;
-use std::collections::HashMap;
 
 use enum_dispatch::enum_dispatch;
 use screeps::Creep;
@@ -23,11 +22,23 @@ use crate::utils::Fraction;
 use crate::utils::PriorityQueue;
 
 pub struct TransportAllocator {
-    haulers: HashMap<ObjectId<Creep>, Info>,
-    creep_imports: HashMap<ObjectId<Creep>, Info>,
+    hauler_id_counter: u16,
+    import_id_counter: u16,
+    haulers: Vec<Info>,
+    creep_imports: Vec<Info>,
     imports: Vec<ImportInfo>,
     exports: Vec<ExportInfo>,
 }
+
+pub struct TransportAllocation {
+    hauler: Vec<Option<Task>>,
+    import: Vec<Option<Task>>,
+}
+
+#[derive(Debug)]
+pub struct HaulerTaskHandle(u16);
+#[derive(Debug)]
+pub struct ImportTaskHandle(u16);
 
 struct Info {
     task: Option<Task>,
@@ -35,6 +46,7 @@ struct Info {
     used_capacity: u32,
     free_capacity: u32,
     pos: Position,
+    spawning: bool,
 }
 
 struct ImportInfo {
@@ -54,72 +66,66 @@ struct ExportInfo {
 impl TransportAllocator {
     pub fn new() -> Self {
         TransportAllocator {
-            haulers: HashMap::new(),
-            creep_imports: HashMap::new(),
+            hauler_id_counter: 0,
+            import_id_counter: 0,
+            haulers: Vec::new(),
+            creep_imports: Vec::new(),
             imports: Vec::new(),
             exports: Vec::new(),
         }
     }
 
-    pub fn register_hauler(&mut self, creep: &Creep, task: Option<Task>) {
-        if creep.spawning() {
-            return;
-        }
-        let Some(creep_id) = creep.try_id() else {
-            return;
-        };
+    #[must_use = "Task handle dropped before used"]
+    pub fn register_hauler(&mut self, creep: &Creep, task: Option<Task>) -> HaulerTaskHandle {
         let size = creep
             .body()
             .into_iter()
             .map(|p| p.part())
             .filter(|p| *p == Part::Work)
             .count() as u8;
-        let used_capacity = creep.store().get_used_capacity(None);
-        let free_capacity = creep.store().get_free_capacity(None) as u32;
-        let pos = creep.pos();
-        self.haulers.insert(
-            creep_id,
-            Info {
-                task,
-                size,
-                used_capacity,
-                free_capacity,
-                pos,
-            },
-        );
+        self.haulers.push(Info {
+            task,
+            size,
+            used_capacity: creep.store().get_used_capacity(None),
+            free_capacity: creep.store().get_free_capacity(None) as u32,
+            pos: creep.pos(),
+            spawning: creep.spawning(),
+        });
+
+        let id = self.hauler_id_counter;
+        self.hauler_id_counter += 1;
+        HaulerTaskHandle(id)
     }
 
-    pub fn register_creep_import(&mut self, creep: &Creep, task: Option<Task>) {
-        if creep.spawning() {
-            return;
-        }
-        let creep_id = creep.try_id();
-        let Some(creep_id) = creep_id else { return };
+    #[must_use = "Task handle dropped before used"]
+    pub fn register_creep_import(&mut self, creep: &Creep, task: Option<Task>) -> ImportTaskHandle {
         let size = creep
             .body()
             .into_iter()
             .map(|p| p.part())
             .filter(|p| *p == Part::Work)
             .count() as u8;
-        let used_capacity = creep.store().get_used_capacity(None);
-        let free_capacity = creep.store().get_free_capacity(None) as u32;
-        let pos = creep.pos();
-        self.creep_imports.insert(
-            creep_id,
-            Info {
-                task,
-                size,
-                used_capacity,
-                free_capacity,
-                pos,
-            },
-        );
+        self.creep_imports.push(Info {
+            task,
+            size,
+            used_capacity: creep.store().get_used_capacity(None),
+            free_capacity: creep.store().get_free_capacity(None) as u32,
+            pos: creep.pos(),
+            spawning: creep.spawning(),
+        });
+
+        let id = self.import_id_counter;
+        self.import_id_counter += 1;
+        ImportTaskHandle(id)
     }
 
+    /*
+    #[must_use = "Task handle dropped before used"]
     pub fn register_creep_export(&mut self, creep: &Creep) {
         // TODO: deposit whatever it is carrying
         let _ = creep;
     }
+    */
 
     pub fn register_export(&mut self, export: impl Into<ResourceExport>, priority: Priority) {
         let target = export.into();
@@ -149,9 +155,14 @@ impl TransportAllocator {
         }
     }
 
-    pub fn allocate(&mut self) {
+    pub fn allocate(mut self) -> TransportAllocation {
+        let mut alloc = TransportAllocation {
+            hauler: vec![None; self.hauler_id_counter as usize],
+            import: vec![None; self.import_id_counter as usize],
+        };
+
         // Remove corresponded amount already queued
-        for info in self.haulers.values().chain(self.creep_imports.values()) {
+        for info in self.haulers.iter().chain(&self.creep_imports) {
             let Some(task) = info.task else { continue };
             match task {
                 Task::Pickup(id) => {
@@ -171,11 +182,11 @@ impl TransportAllocator {
         self.imports.retain(|info| info.amount > 0);
 
         // calculate needed network flow
-        let creep_import_amount: u32 = self.creep_imports.values().map(|i| i.free_capacity).sum();
+        let creep_import_amount: u32 = self.creep_imports.iter().map(|i| i.free_capacity).sum();
         let total_import: u32 = self.imports.iter().map(|info| info.amount).sum();
         let total_export: u32 = self.exports.iter().map(|info| info.amount).sum();
         let total_export = total_export + creep_import_amount;
-        let total_hauler_holding: u32 = self.haulers.values().map(|info| info.used_capacity).sum();
+        let total_hauler_holding: u32 = self.haulers.iter().map(|info| info.used_capacity).sum();
         let active_import: u32 = self
             .imports
             .iter()
@@ -203,24 +214,32 @@ impl TransportAllocator {
             max(active_import, active_export + total_hauler_holding),
         );
 
-        let creep_import_infos: PriorityQueue<_, (&mut Info, bool)> = self
+        enum TaskType {
+            Hauler,
+            Import,
+        }
+
+        let creep_import_infos: PriorityQueue<_, (&Info, TaskType, usize)> = self
             .creep_imports
-            .values_mut()
-            .map(|info| (info.size, (info, false)))
+            .iter()
+            .enumerate()
+            .map(|(id, info)| (info.size, (info, TaskType::Import, id)))
             .collect();
 
-        let hauler_infos: PriorityQueue<_, (&mut Info, bool)> = self
+        let hauler_infos: PriorityQueue<_, (&Info, TaskType, usize)> = self
             .haulers
-            .values_mut()
-            .map(|info| (info.size, (info, true)))
+            .iter()
+            .enumerate()
+            .map(|(id, info)| (info.size, (info, TaskType::Hauler, id)))
             .collect();
 
         // dispatch task for haulers without a task
-        for (_, (info, can_import)) in creep_import_infos.into_iter().chain(hauler_infos) {
-            if info.task.is_some() {
+        for (_, (info, task_type, id)) in creep_import_infos.into_iter().chain(hauler_infos) {
+            if info.task.is_some() || info.spawning {
                 continue;
             }
 
+            let can_import = matches!(task_type, TaskType::Hauler);
             let import_candidate = if can_import && import_requested > 0 {
                 self.imports
                     .iter()
@@ -284,16 +303,25 @@ impl TransportAllocator {
                 (Some(_), None) => unreachable(),
             };
 
-            info.task = Some(task);
+            match task_type {
+                TaskType::Hauler => alloc.hauler[id] = Some(task),
+                TaskType::Import => alloc.import[id] = Some(task),
+            }
         }
-    }
 
-    pub fn delegate(&self, creep: &Creep) -> Option<Task> {
-        let creep_id = creep.try_id()?;
-        self.haulers
-            .get(&creep_id)
-            .or_else(|| self.creep_imports.get(&creep_id))
-            .and_then(|info| info.task)
+        alloc
+    }
+}
+
+impl HaulerTaskHandle {
+    pub fn resolve(&self, transport: &TransportAllocation) -> Option<Task> {
+        transport.hauler[self.0 as usize]
+    }
+}
+
+impl ImportTaskHandle {
+    pub fn resolve(&self, transport: &TransportAllocation) -> Option<Task> {
+        transport.import[self.0 as usize]
     }
 }
 
