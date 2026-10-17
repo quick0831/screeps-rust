@@ -9,7 +9,7 @@ use crate::path_finder::PathFinder;
 use crate::roles::RoleTrait;
 use crate::room::RoomMemory;
 use crate::room::SharedData;
-use crate::transport_alloc::HaulerTaskHandle;
+use crate::transport_alloc::BidirTaskHandle;
 use crate::transport_alloc::Task;
 use crate::transport_alloc::TransportAllocation;
 use crate::transport_alloc::TransportAllocator;
@@ -19,7 +19,7 @@ use crate::transport_alloc::TransportAllocator;
 pub struct Hauler {
     task: Option<Task>,
     #[serde(skip)]
-    task_handle: Option<HaulerTaskHandle>,
+    task_handle: Option<BidirTaskHandle>,
 }
 
 impl RoleTrait for Hauler {
@@ -28,7 +28,7 @@ impl RoleTrait for Hauler {
             if creep.store().get_used_capacity(None) == 0 {
                 let _ = creep.suicide();
             } else {
-                // self.task_handle = Some(transport.register_creep_export(creep));
+                self.task_handle = Some(transport.register_creep_export(creep, self.task).into());
             }
         } else {
             self.task_handle = Some(transport.register_hauler(creep, self.task));

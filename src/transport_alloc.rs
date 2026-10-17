@@ -22,23 +22,28 @@ use crate::utils::Fraction;
 use crate::utils::PriorityQueue;
 
 pub struct TransportAllocator {
-    hauler_id_counter: u16,
-    import_id_counter: u16,
-    haulers: Vec<Info>,
-    creep_imports: Vec<Info>,
+    id_counter: u16,
+    creeps: Vec<Info>,
     imports: Vec<ImportInfo>,
     exports: Vec<ExportInfo>,
 }
 
 pub struct TransportAllocation {
-    hauler: Vec<Option<Task>>,
-    import: Vec<Option<Task>>,
+    alloc: Vec<Option<Task>>,
 }
 
 #[derive(Debug)]
-pub struct HaulerTaskHandle(u16);
+pub struct BidirTaskHandle(u16);
 #[derive(Debug)]
 pub struct ImportTaskHandle(u16);
+#[derive(Debug)]
+pub struct ExportTaskHandle(u16);
+
+enum TaskType {
+    Bidir,
+    Import,
+    Export,
+}
 
 struct Info {
     task: Option<Task>,
@@ -47,6 +52,7 @@ struct Info {
     free_capacity: u32,
     pos: Position,
     spawning: bool,
+    task_type: TaskType,
 }
 
 struct ImportInfo {
@@ -66,35 +72,38 @@ struct ExportInfo {
 impl TransportAllocator {
     pub fn new() -> Self {
         TransportAllocator {
-            hauler_id_counter: 0,
-            import_id_counter: 0,
-            haulers: Vec::new(),
-            creep_imports: Vec::new(),
+            id_counter: 0,
+            creeps: Vec::new(),
             imports: Vec::new(),
             exports: Vec::new(),
         }
     }
 
+    fn next_id(&mut self) -> u16 {
+        let id = self.id_counter;
+        self.id_counter += 1;
+        id
+    }
+
     #[must_use = "Task handle dropped before used"]
-    pub fn register_hauler(&mut self, creep: &Creep, task: Option<Task>) -> HaulerTaskHandle {
+    pub fn register_hauler(&mut self, creep: &Creep, task: Option<Task>) -> BidirTaskHandle {
         let size = creep
             .body()
             .into_iter()
             .map(|p| p.part())
             .filter(|p| *p == Part::Work)
             .count() as u8;
-        self.haulers.push(Info {
+        self.creeps.push(Info {
             task,
             size,
             used_capacity: creep.store().get_used_capacity(None),
             free_capacity: creep.store().get_free_capacity(None) as u32,
             pos: creep.pos(),
             spawning: creep.spawning(),
+            task_type: TaskType::Bidir,
         });
 
-        let id = self.hauler_id_counter;
-        self.hauler_id_counter += 1;
-        HaulerTaskHandle(id)
+        BidirTaskHandle(self.next_id())
     }
 
     #[must_use = "Task handle dropped before used"]
@@ -105,27 +114,39 @@ impl TransportAllocator {
             .map(|p| p.part())
             .filter(|p| *p == Part::Work)
             .count() as u8;
-        self.creep_imports.push(Info {
+        self.creeps.push(Info {
             task,
             size,
             used_capacity: creep.store().get_used_capacity(None),
             free_capacity: creep.store().get_free_capacity(None) as u32,
             pos: creep.pos(),
             spawning: creep.spawning(),
+            task_type: TaskType::Import,
         });
 
-        let id = self.import_id_counter;
-        self.import_id_counter += 1;
-        ImportTaskHandle(id)
+        ImportTaskHandle(self.next_id())
     }
 
-    /*
     #[must_use = "Task handle dropped before used"]
-    pub fn register_creep_export(&mut self, creep: &Creep) {
-        // TODO: deposit whatever it is carrying
-        let _ = creep;
+    pub fn register_creep_export(&mut self, creep: &Creep, task: Option<Task>) -> ExportTaskHandle {
+        let size = creep
+            .body()
+            .into_iter()
+            .map(|p| p.part())
+            .filter(|p| *p == Part::Work)
+            .count() as u8;
+        self.creeps.push(Info {
+            task,
+            size,
+            used_capacity: creep.store().get_used_capacity(None),
+            free_capacity: creep.store().get_free_capacity(None) as u32,
+            pos: creep.pos(),
+            spawning: creep.spawning(),
+            task_type: TaskType::Export,
+        });
+
+        ExportTaskHandle(self.next_id())
     }
-    */
 
     pub fn register_export(&mut self, export: impl Into<ResourceExport>, priority: Priority) {
         let target = export.into();
@@ -156,13 +177,10 @@ impl TransportAllocator {
     }
 
     pub fn allocate(mut self) -> TransportAllocation {
-        let mut alloc = TransportAllocation {
-            hauler: vec![None; self.hauler_id_counter as usize],
-            import: vec![None; self.import_id_counter as usize],
-        };
+        let mut alloc = vec![None; self.id_counter as usize];
 
         // Remove corresponded amount already queued
-        for info in self.haulers.iter().chain(&self.creep_imports) {
+        for info in &self.creeps {
             let Some(task) = info.task else { continue };
             match task {
                 Task::Pickup(id) => {
@@ -182,17 +200,35 @@ impl TransportAllocator {
         self.imports.retain(|info| info.amount > 0);
 
         // calculate needed network flow
-        let creep_import_amount: u32 = self.creep_imports.iter().map(|i| i.free_capacity).sum();
+        let creep_import_amount: u32 = self
+            .creeps
+            .iter()
+            .filter(|info| matches!(info.task_type, TaskType::Import))
+            .map(|info| info.free_capacity)
+            .sum();
+        let creep_export_amount: u32 = self
+            .creeps
+            .iter()
+            .filter(|info| matches!(info.task_type, TaskType::Export))
+            .map(|info| info.free_capacity)
+            .sum();
         let total_import: u32 = self.imports.iter().map(|info| info.amount).sum();
+        let total_import = total_import + creep_export_amount;
         let total_export: u32 = self.exports.iter().map(|info| info.amount).sum();
         let total_export = total_export + creep_import_amount;
-        let total_hauler_holding: u32 = self.haulers.iter().map(|info| info.used_capacity).sum();
+        let total_hauler_holding: u32 = self
+            .creeps
+            .iter()
+            .filter(|info| matches!(info.task_type, TaskType::Bidir))
+            .map(|info| info.used_capacity)
+            .sum();
         let active_import: u32 = self
             .imports
             .iter()
             .filter(|info| info.priority != Priority::Passive)
             .map(|info| info.amount)
             .sum();
+        let active_import = active_import + creep_export_amount;
         let active_export: u32 = self
             .exports
             .iter()
@@ -214,32 +250,20 @@ impl TransportAllocator {
             max(active_import, active_export + total_hauler_holding),
         );
 
-        enum TaskType {
-            Hauler,
-            Import,
-        }
-
-        let creep_import_infos: PriorityQueue<_, (&Info, TaskType, usize)> = self
-            .creep_imports
+        let infos: PriorityQueue<_, (usize, &Info)> = self
+            .creeps
             .iter()
             .enumerate()
-            .map(|(id, info)| (info.size, (info, TaskType::Import, id)))
+            .map(|(id, info)| (info.size, (id, info)))
             .collect();
 
-        let hauler_infos: PriorityQueue<_, (&Info, TaskType, usize)> = self
-            .haulers
-            .iter()
-            .enumerate()
-            .map(|(id, info)| (info.size, (info, TaskType::Hauler, id)))
-            .collect();
-
-        // dispatch task for haulers without a task
-        for (_, (info, task_type, id)) in creep_import_infos.into_iter().chain(hauler_infos) {
+        // dispatch task for creeps without a task
+        for (_, (id, info)) in infos {
             if info.task.is_some() || info.spawning {
                 continue;
             }
 
-            let can_import = matches!(task_type, TaskType::Hauler);
+            let can_import = matches!(info.task_type, TaskType::Bidir | TaskType::Export);
             let import_candidate = if can_import && import_requested > 0 {
                 self.imports
                     .iter()
@@ -258,7 +282,8 @@ impl TransportAllocator {
                 None
             };
 
-            let export_candidate = if export_requested > 0 {
+            let can_export = matches!(info.task_type, TaskType::Bidir | TaskType::Import);
+            let export_candidate = if can_export && export_requested > 0 {
                 self.exports
                     .iter()
                     .enumerate()
@@ -303,25 +328,41 @@ impl TransportAllocator {
                 (Some(_), None) => unreachable(),
             };
 
-            match task_type {
-                TaskType::Hauler => alloc.hauler[id] = Some(task),
-                TaskType::Import => alloc.import[id] = Some(task),
-            }
+            alloc[id] = Some(task);
         }
 
-        alloc
+        TransportAllocation { alloc }
     }
 }
 
-impl HaulerTaskHandle {
+impl BidirTaskHandle {
     pub fn resolve(&self, transport: &TransportAllocation) -> Option<Task> {
-        transport.hauler[self.0 as usize]
+        transport.alloc[self.0 as usize]
     }
 }
 
 impl ImportTaskHandle {
     pub fn resolve(&self, transport: &TransportAllocation) -> Option<Task> {
-        transport.import[self.0 as usize]
+        transport.alloc[self.0 as usize]
+    }
+}
+
+impl ExportTaskHandle {
+    #[allow(unused)]
+    pub fn resolve(&self, transport: &TransportAllocation) -> Option<Task> {
+        transport.alloc[self.0 as usize]
+    }
+}
+
+impl From<ImportTaskHandle> for BidirTaskHandle {
+    fn from(value: ImportTaskHandle) -> Self {
+        BidirTaskHandle(value.0)
+    }
+}
+
+impl From<ExportTaskHandle> for BidirTaskHandle {
+    fn from(value: ExportTaskHandle) -> Self {
+        BidirTaskHandle(value.0)
     }
 }
 
