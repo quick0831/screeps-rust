@@ -142,18 +142,12 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
         .iter()
         .cloned()
         .find_map(|s| s.try_into().ok());
-    // Disabled: not yet support two sided transportation
-    // let no_storage = storage.is_none();
-    let no_storage = false;
     if let Some(s) = storage {
         transport.register_import(s.clone(), Priority::Passive);
         transport.register_export(s, Priority::Passive);
     }
 
     d.spawns.iter().cloned().for_each(|s| {
-        if no_storage {
-            transport.register_export(s.clone(), Priority::Passive);
-        }
         transport.register_import(s, Priority::High);
     });
 
@@ -162,9 +156,6 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
         .cloned()
         .filter_map(|s| -> Option<StructureExtension> { s.try_into().ok() })
         .for_each(|s| {
-            if no_storage {
-                transport.register_export(s.clone(), Priority::Passive);
-            }
             transport.register_import(s, Priority::High);
         });
 
