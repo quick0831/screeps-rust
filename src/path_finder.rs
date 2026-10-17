@@ -143,6 +143,9 @@ impl PathFinder {
                 .into_iter()
                 .filter(|s| s.structure_type().is_obstacle())
                 .map(|s| s.pos());
+            for pos in road_pos {
+                cost_matrix.set(pos.xy(), MOVE_COST_ROAD as u8);
+            }
             for pos in stasis_creeps
                 .iter()
                 .cloned()
@@ -150,9 +153,6 @@ impl PathFinder {
                 .chain(construction_site_pos)
             {
                 cost_matrix.set(pos.xy(), COST_UNWALKABLE);
-            }
-            for pos in road_pos {
-                cost_matrix.set(pos.xy(), MOVE_COST_ROAD as u8);
             }
             let result = MultiRoomCostResult::CostMatrix(cost_matrix.into());
             cache.insert(room_name, clone_result(&result));
