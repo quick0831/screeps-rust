@@ -142,28 +142,25 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
         .iter()
         .cloned()
         .find_map(|s| s.try_into().ok());
-    let no_storage = storage.is_none();
+    // Disabled: not yet support two sided transportation
+    // let no_storage = storage.is_none();
+    let no_storage = false;
     if let Some(s) = storage {
         transport.register_import(s.clone(), Priority::Passive);
         transport.register_export(s, Priority::Passive);
     }
 
-    d.spawns
-        .iter()
-        .filter(|s| s.store().get_free_capacity(Some(ResourceType::Energy)) > 0)
-        .cloned()
-        .for_each(|s| {
-            if no_storage {
-                transport.register_export(s.clone(), Priority::Passive);
-            }
-            transport.register_import(s, Priority::High);
-        });
+    d.spawns.iter().cloned().for_each(|s| {
+        if no_storage {
+            transport.register_export(s.clone(), Priority::Passive);
+        }
+        transport.register_import(s, Priority::High);
+    });
 
     my_structures
         .iter()
         .cloned()
         .filter_map(|s| -> Option<StructureExtension> { s.try_into().ok() })
-        .filter(|s| s.store().get_free_capacity(Some(ResourceType::Energy)) > 0)
         .for_each(|s| {
             if no_storage {
                 transport.register_export(s.clone(), Priority::Passive);

@@ -199,62 +199,60 @@ impl TransportAllocator {
         self.exports.retain(|info| info.amount > 0);
         self.imports.retain(|info| info.amount > 0);
 
-        // calculate needed network flow
-        let creep_import_amount: u32 = self
-            .creeps
-            .iter()
-            .filter(|info| matches!(info.task_type, TaskType::Import))
-            .map(|info| info.free_capacity)
-            .sum();
-        let creep_export_amount: u32 = self
+        // exports
+        let creep_export: u32 = self
             .creeps
             .iter()
             .filter(|info| matches!(info.task_type, TaskType::Export))
-            .map(|info| info.free_capacity)
+            .map(|info| info.used_capacity)
             .sum();
-        let total_import: u32 = self.imports.iter().map(|info| info.amount).sum();
-        let total_import = total_import + creep_export_amount;
-        let total_export: u32 = self.exports.iter().map(|info| info.amount).sum();
-        let total_export = total_export + creep_import_amount;
-        let total_hauler_holding: u32 = self
+        let creep_bidir: u32 = self
             .creeps
             .iter()
             .filter(|info| matches!(info.task_type, TaskType::Bidir))
             .map(|info| info.used_capacity)
             .sum();
-        let active_import: u32 = self
-            .imports
-            .iter()
-            .filter(|info| info.priority != Priority::Passive)
-            .map(|info| info.amount)
-            .sum();
-        let active_import = active_import + creep_export_amount;
-        let active_export: u32 = self
+        let structure_export: u32 = self.exports.iter().map(|info| info.amount).sum();
+        let structure_export_active: u32 = self
             .exports
             .iter()
             .filter(|info| info.priority != Priority::Passive)
             .map(|info| info.amount)
             .sum();
-        let active_export = active_export + creep_import_amount;
 
-        let network_cap = min(total_import, total_export);
-        let mut export_requested = min(
-            network_cap,
-            max(
-                active_import.saturating_sub(total_hauler_holding),
-                active_export,
-            ),
-        );
-        let mut import_requested = min(
-            network_cap,
-            max(active_import, active_export + total_hauler_holding),
-        );
+        // imports
+        let creep_import: u32 = self
+            .creeps
+            .iter()
+            .filter(|info| matches!(info.task_type, TaskType::Import))
+            .map(|info| info.free_capacity)
+            .sum();
+        let structure_import: u32 = self.imports.iter().map(|info| info.amount).sum();
+        let structure_import_active: u32 = self
+            .imports
+            .iter()
+            .filter(|info| info.priority != Priority::Passive)
+            .map(|info| info.amount)
+            .sum();
+
+        // sum of all network flow
+        let total_export = creep_export + creep_bidir + structure_export;
+        let active_export = creep_export + creep_bidir + structure_export_active;
+        let total_import = creep_import + structure_import;
+        let active_import = creep_import + structure_import_active;
+
+        let network_cap = min(total_export, total_import);
+        let mut export_requested = min(network_cap, max(structure_export_active, active_import));
+        let mut import_requested = min(network_cap, max(active_export, structure_import_active));
 
         let infos: PriorityQueue<_, (usize, &Info)> = self
             .creeps
             .iter()
             .enumerate()
-            .map(|(id, info)| (info.size, (id, info)))
+            .map(|(id, info)| {
+                let single_sided = matches!(info.task_type, TaskType::Import | TaskType::Export);
+                ((single_sided, info.size), (id, info))
+            })
             .collect();
 
         // dispatch task for creeps without a task
