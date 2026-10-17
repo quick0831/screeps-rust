@@ -4,7 +4,7 @@ import 'fastestsmallesttextencoderdecoder-encodeinto/EncoderDecoderTogether.min.
 import * as bot from '../pkg/screeps_rust.js';
 // replace this with the name of your module
 const MODULE_NAME = "screeps_rust";
-const BUCKET_BOOT_THRESHOLD = 1500;
+const BUCKET_BOOT_THRESHOLD = 300;
 
 // This provides the function `console.error` that wasm_bindgen sometimes expects to exist,
 // especially with type checks in debug mode. An alternative is to have this be `function () {}`
@@ -59,7 +59,7 @@ function loaded_loop() {
 // cache for each step of the wasm module's initialization
 let wasm_bytes, wasm_module, wasm_instance;
 
-module.exports.loop = function() {
+module.exports.loop = function () {
     // need to freshly override the fake console object each tick
     console.error = console_error;
 
