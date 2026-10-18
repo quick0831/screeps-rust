@@ -62,26 +62,24 @@ impl RoleTrait for Builder {
             self.task = handle.resolve(transport);
         }
 
+        if self.target.is_none() {
+            let center = creep.pos();
+            self.target = d
+                .room
+                .find(find::MY_CONSTRUCTION_SITES, None)
+                .into_iter()
+                .min_by_key(|s| center.get_range_to(s.pos()))
+                .and_then(|site| site.try_id());
+        }
+
         match (self.state, self.target, self.task) {
             (BuilderState::Build, Some(id), _) => {
-                let target = if let Some(target) = id.resolve() {
-                    target
+                if let Some(target) = id.resolve() {
+                    if let Err(BuildErrorCode::NotInRange) = creep.build(&target) {
+                        path_finder.move_to(creep, target.pos(), 3);
+                    }
                 } else {
-                    let center = creep.pos();
-                    let Some(new_target) = d
-                        .room
-                        .find(find::MY_CONSTRUCTION_SITES, None)
-                        .into_iter()
-                        .min_by_key(|s| center.get_range_to(s.pos()))
-                    else {
-                        self.task = None;
-                        return;
-                    };
-                    self.target = new_target.try_id();
-                    new_target
-                };
-                if let Err(BuildErrorCode::NotInRange) = creep.build(&target) {
-                    path_finder.move_to(creep, target.pos(), 3);
+                    self.task = None;
                 }
             }
             (BuilderState::Fetch, Some(_), Some(Task::Pickup(id))) => {
