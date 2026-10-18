@@ -30,36 +30,18 @@ pub struct Builder {
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 enum BuilderState {
     Build,
-    Fetch,
     #[default]
-    Stall,
+    #[serde(other)]
+    Fetch,
 }
 
 impl RoleTrait for Builder {
-    fn register(&mut self, creep: &Creep, d: &mut SharedData, transport: &mut TransportAllocator) {
+    fn register(&mut self, creep: &Creep, _d: &mut SharedData, transport: &mut TransportAllocator) {
         if creep.store().get(ResourceType::Energy).unwrap_or(0) == 0 {
-            let energy_avail = d.room.energy_available();
-            let energy_cap = d.room.energy_capacity_available();
-            let msg;
-            (self.state, msg) = if energy_avail > 250 && energy_cap - energy_avail < 300 {
-                (BuilderState::Fetch, "🫳 fetch")
-            } else {
-                (BuilderState::Stall, "⏸️")
-            };
-            let _ = creep.say(msg, false);
-        }
-        if self.target.is_none() {
-            let center = creep.pos();
-            self.target = d
-                .room
-                .find(find::MY_CONSTRUCTION_SITES, None)
-                .into_iter()
-                .min_by_key(|s| center.get_range_to(s.pos()))
-                .and_then(|site| site.try_id());
+            self.state = BuilderState::Fetch;
         }
         if creep.store().get_free_capacity(None) == 0 {
             self.state = BuilderState::Build;
-            let _ = creep.say("🚧 build", false);
         }
         if self.state == BuilderState::Fetch {
             self.task_handle = Some(transport.register_creep_import(creep, self.task));
@@ -81,13 +63,25 @@ impl RoleTrait for Builder {
         }
 
         match (self.state, self.target, self.task) {
-            (BuilderState::Build, Some(target), _) => {
-                if let Some(target) = target.resolve() {
-                    if let Err(BuildErrorCode::NotInRange) = creep.build(&target) {
-                        path_finder.move_to(creep, target.pos(), 3);
-                    }
+            (BuilderState::Build, Some(id), _) => {
+                let target = if let Some(target) = id.resolve() {
+                    target
                 } else {
-                    self.target = None;
+                    let center = creep.pos();
+                    let Some(new_target) = d
+                        .room
+                        .find(find::MY_CONSTRUCTION_SITES, None)
+                        .into_iter()
+                        .min_by_key(|s| center.get_range_to(s.pos()))
+                    else {
+                        self.task = None;
+                        return;
+                    };
+                    self.target = new_target.try_id();
+                    new_target
+                };
+                if let Err(BuildErrorCode::NotInRange) = creep.build(&target) {
+                    path_finder.move_to(creep, target.pos(), 3);
                 }
             }
             (BuilderState::Fetch, Some(_), Some(Task::Pickup(id))) => {
