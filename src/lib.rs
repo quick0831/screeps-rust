@@ -7,6 +7,7 @@ use wasm_bindgen::prelude::*;
 use log::info;
 use log::warn;
 
+mod cache;
 mod container;
 mod logging;
 mod memory;

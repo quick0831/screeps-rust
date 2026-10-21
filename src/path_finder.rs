@@ -1,4 +1,7 @@
 use std::collections::BTreeMap;
+use std::collections::HashMap;
+use std::collections::VecDeque;
+use std::collections::hash_map::Entry;
 use std::mem::take;
 
 use screeps::Creep;
@@ -18,18 +21,27 @@ use screeps::pathfinder::search;
 use screeps::pathfinder::search_many;
 use screeps::prelude::*;
 
+use crate::cache::Cache;
+
 const COST_UNWALKABLE: u8 = 255;
+const CACHE_VALID_TICK: u8 = 20;
+
+static PATH_CACHE: Cache<HashMap<ObjectId<Creep>, CachedPath>> = Cache::new();
 
 pub struct PathFinder {
-    creeps: BTreeMap<ObjectId<Creep>, (PathType, Position)>,
+    creeps: BTreeMap<ObjectId<Creep>, (Option<PathType>, Position)>,
 }
 
 enum PathType {
-    NoTarget,
     MoveTo(Position, u32),
     MoveAway(Position, u32),
     MoveToMulti(Vec<SearchGoal>),
     MoveAwayMulti(Vec<SearchGoal>),
+}
+
+struct CachedPath {
+    valid: u8,
+    path: VecDeque<Position>,
 }
 
 impl PathFinder {
@@ -39,7 +51,7 @@ impl PathFinder {
             let Some(id) = creep.try_id() else {
                 continue;
             };
-            creeps.insert(id, (PathType::NoTarget, creep.pos()));
+            creeps.insert(id, (None, creep.pos()));
         }
 
         Self { creeps }
@@ -56,7 +68,7 @@ impl PathFinder {
         let Some(id) = id else { return };
         let r = self.creeps.get_mut(&id);
         let Some(r) = r else { return };
-        r.0 = PathType::MoveTo(target_pos, range);
+        r.0 = Some(PathType::MoveTo(target_pos, range));
     }
 
     #[allow(unused)]
@@ -69,7 +81,7 @@ impl PathFinder {
         let Some(id) = id else { return };
         let r = self.creeps.get_mut(&id);
         let Some(r) = r else { return };
-        r.0 = PathType::MoveAway(target_pos, range);
+        r.0 = Some(PathType::MoveAway(target_pos, range));
     }
 
     #[allow(unused)]
@@ -86,7 +98,7 @@ impl PathFinder {
         let Some(id) = id else { return };
         let r = self.creeps.get_mut(&id);
         let Some(r) = r else { return };
-        r.0 = PathType::MoveToMulti(goals);
+        r.0 = Some(PathType::MoveToMulti(goals));
     }
 
     pub fn move_away_multi(&mut self, creep: &Creep, goals: &[SearchGoal]) {
@@ -102,14 +114,14 @@ impl PathFinder {
         let Some(id) = id else { return };
         let r = self.creeps.get_mut(&id);
         let Some(r) = r else { return };
-        r.0 = PathType::MoveAwayMulti(goals);
+        r.0 = Some(PathType::MoveAwayMulti(goals));
     }
 
     pub fn process_movements(mut self) {
         let stasis_creeps: Vec<_> = self
             .creeps
             .iter()
-            .filter(|(_, (p, _))| matches!(p, PathType::NoTarget))
+            .filter(|(_, (p, _))| p.is_none())
             .map(|(_, (_, p))| p)
             .cloned()
             .collect();
@@ -159,8 +171,7 @@ impl PathFinder {
             result
         };
 
-        let mut idx = 0;
-        for (id, (target, pos)) in take(&mut self.creeps).into_iter() {
+        let mut call_path_finder = |target, pos| {
             let result = match target {
                 PathType::MoveTo(target, range) => {
                     let options = SearchOptions::new(&mut get_costmatrix).max_rooms(1);
@@ -184,11 +195,42 @@ impl PathFinder {
                         .max_ops(100);
                     search_many(pos, goals.into_iter(), Some(options))
                 }
-                PathType::NoTarget => continue,
             };
-            let creep = id.resolve();
-            let Some(creep) = creep else { continue };
-            let _ = creep.move_by_path(&result.opaque_path());
+            VecDeque::from(result.path())
+        };
+
+        let mut path_cache = PATH_CACHE.get_or_init(HashMap::new);
+
+        let mut idx = 0;
+        for (id, (target, pos)) in take(&mut self.creeps).into_iter() {
+            let Some(target) = target else { continue };
+            let mut entry = match path_cache.entry(id) {
+                Entry::Occupied(mut entry) => {
+                    let e = entry.get_mut();
+                    if e.valid == 0 {
+                        e.valid = CACHE_VALID_TICK;
+                        e.path = call_path_finder(target, pos);
+                    } else {
+                        e.valid -= 1;
+                    }
+                    entry
+                }
+                Entry::Vacant(entry) => {
+                    let valid = CACHE_VALID_TICK;
+                    let path = call_path_finder(target, pos);
+                    let value = CachedPath { valid, path };
+                    entry.insert_entry(value)
+                }
+            };
+            let path = &mut entry.get_mut().path;
+
+            path.pop_front_if(|p| *p == pos);
+            let Some(direction) = path.front().and_then(|p| pos.get_direction_to(*p)) else {
+                continue;
+            };
+
+            let Some(creep) = id.resolve() else { continue };
+            let _ = creep.move_direction(direction);
 
             if let Some(room) = creep.room() {
                 let visual = room.visual();
@@ -196,7 +238,7 @@ impl PathFinder {
                 let offset = if idx % 2 == 0 { idx / 2 } else { -idx / 2 } as f32 * 0.05;
                 let points = Some(pos)
                     .into_iter()
-                    .chain(result.path())
+                    .chain(path.iter().cloned())
                     .map(|p| {
                         let (x, y) = p.coords();
                         (x as f32, y as f32 + offset)
