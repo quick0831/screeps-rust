@@ -96,7 +96,7 @@ impl RoleTrait for Builder {
                 }
             }
             _ => {
-                path_finder.move_away_multi(creep, &d.keepouts);
+                path_finder.idle(creep);
                 self.task = None;
             }
         }

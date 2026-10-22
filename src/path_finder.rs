@@ -2,7 +2,6 @@ use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::collections::hash_map::Entry;
-use std::mem::take;
 
 use screeps::Creep;
 use screeps::LocalCostMatrix;
@@ -29,7 +28,14 @@ const CACHE_VALID_TICK: u8 = 20;
 static PATH_CACHE: Cache<HashMap<ObjectId<Creep>, CachedPath>> = Cache::new();
 
 pub struct PathFinder {
-    creeps: BTreeMap<ObjectId<Creep>, (Option<PathType>, Position)>,
+    creeps: BTreeMap<ObjectId<Creep>, (WorkType, Position)>,
+}
+
+#[derive(Clone)]
+enum WorkType {
+    Idle,
+    Working,
+    Path(PathType),
 }
 
 enum PathType {
@@ -37,6 +43,18 @@ enum PathType {
     Away(Position, u32),
     TowardMulti(Vec<SearchGoal>),
     AwayMulti(Vec<SearchGoal>),
+}
+
+impl Clone for PathType {
+    fn clone(&self) -> Self {
+        let c = |v: &Vec<SearchGoal>| v.iter().map(clone_search_goal).collect();
+        match self {
+            PathType::Toward(p, d) => PathType::Toward(*p, *d),
+            PathType::Away(p, d) => PathType::Away(*p, *d),
+            PathType::TowardMulti(v) => PathType::TowardMulti(c(v)),
+            PathType::AwayMulti(v) => PathType::AwayMulti(c(v)),
+        }
+    }
 }
 
 struct CachedPath {
@@ -51,7 +69,7 @@ impl PathFinder {
             let Some(id) = creep.try_id() else {
                 continue;
             };
-            creeps.insert(id, (None, creep.pos()));
+            creeps.insert(id, (WorkType::Working, creep.pos()));
         }
 
         Self { creeps }
@@ -68,7 +86,7 @@ impl PathFinder {
         let Some(id) = id else { return };
         let r = self.creeps.get_mut(&id);
         let Some(r) = r else { return };
-        r.0 = Some(PathType::Toward(target_pos, range));
+        r.0 = WorkType::Path(PathType::Toward(target_pos, range));
     }
 
     #[allow(unused)]
@@ -81,7 +99,7 @@ impl PathFinder {
         let Some(id) = id else { return };
         let r = self.creeps.get_mut(&id);
         let Some(r) = r else { return };
-        r.0 = Some(PathType::Away(target_pos, range));
+        r.0 = WorkType::Path(PathType::Away(target_pos, range));
     }
 
     #[allow(unused)]
@@ -98,9 +116,10 @@ impl PathFinder {
         let Some(id) = id else { return };
         let r = self.creeps.get_mut(&id);
         let Some(r) = r else { return };
-        r.0 = Some(PathType::TowardMulti(goals));
+        r.0 = WorkType::Path(PathType::TowardMulti(goals));
     }
 
+    #[allow(unused)]
     pub fn move_away_multi(&mut self, creep: &Creep, goals: &[SearchGoal]) {
         let creep_pos = creep.pos();
         if goals
@@ -114,14 +133,22 @@ impl PathFinder {
         let Some(id) = id else { return };
         let r = self.creeps.get_mut(&id);
         let Some(r) = r else { return };
-        r.0 = Some(PathType::AwayMulti(goals));
+        r.0 = WorkType::Path(PathType::AwayMulti(goals));
     }
 
-    pub fn process_movements(mut self) {
-        let stasis_creeps: Vec<_> = self
+    pub fn idle(&mut self, creep: &Creep) {
+        let id = creep.try_id();
+        let Some(id) = id else { return };
+        let r = self.creeps.get_mut(&id);
+        let Some(r) = r else { return };
+        r.0 = WorkType::Idle;
+    }
+
+    pub fn process_movements(self, _idle_keepouts: Vec<SearchGoal>) {
+        let working_creeps: Vec<_> = self
             .creeps
             .iter()
-            .filter(|(_, (p, _))| p.is_none())
+            .filter(|(_, (p, _))| matches!(p, WorkType::Working))
             .map(|(_, (_, p))| p)
             .cloned()
             .collect();
@@ -158,7 +185,7 @@ impl PathFinder {
             for pos in road_pos {
                 cost_matrix.set(pos.xy(), MOVE_COST_ROAD as u8);
             }
-            for pos in stasis_creeps
+            for pos in working_creeps
                 .iter()
                 .cloned()
                 .chain(structure_pos)
@@ -202,8 +229,12 @@ impl PathFinder {
         let mut path_cache = PATH_CACHE.get_or_init(HashMap::new);
 
         let mut idx = 0;
-        for (id, (target, pos)) in take(&mut self.creeps).into_iter() {
-            let Some(target) = target else { continue };
+        for (id, (target, pos)) in &self.creeps {
+            let id = *id;
+            let pos = *pos;
+            let WorkType::Path(target) = target.clone() else {
+                continue;
+            };
             let mut entry = match path_cache.entry(id) {
                 Entry::Occupied(mut entry) => {
                     let e = entry.get_mut();
@@ -222,7 +253,7 @@ impl PathFinder {
                     entry.insert_entry(value)
                 }
             };
-            let path = &mut entry.get_mut().path;
+            let CachedPath { valid, path } = entry.get_mut();
 
             path.pop_front_if(|p| *p == pos);
             let Some(direction) = path.front().and_then(|p| pos.get_direction_to(*p)) else {
@@ -231,6 +262,23 @@ impl PathFinder {
 
             let Some(creep) = id.resolve() else { continue };
             let _ = creep.move_direction(direction);
+
+            let target_pos = pos + direction;
+
+            // Make the crashing creep swap place with the moving creep
+            if let Some((crash_id, (w, _))) =
+                self.creeps.iter().find(|(_, (_, p))| *p == target_pos)
+                && let Some(crash_creep) = crash_id.resolve()
+            {
+                match w {
+                    WorkType::Idle => {
+                        let _ = crash_creep.move_direction(direction.multi_rot(4));
+                    }
+                    // if crash into a working creep, re-run path find
+                    WorkType::Working => *valid = 0,
+                    WorkType::Path(_) => {}
+                }
+            }
 
             if let Some(room) = creep.room() {
                 let visual = room.visual();

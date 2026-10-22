@@ -42,7 +42,7 @@ impl RoleTrait for Upgrader {
     fn run(
         &mut self,
         creep: &Creep,
-        d: &mut SharedData,
+        _d: &mut SharedData,
         _room_memory: &mut RoomMemory,
         path_finder: &mut PathFinder,
         transport: &TransportAllocation,
@@ -74,7 +74,7 @@ impl RoleTrait for Upgrader {
             }
         } else {
             // No task available, enter idle state
-            path_finder.move_away_multi(creep, &d.keepouts);
+            path_finder.idle(creep);
             self.task = None;
         }
     }

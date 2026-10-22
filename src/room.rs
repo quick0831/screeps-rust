@@ -43,7 +43,6 @@ pub struct SharedData {
     pub source_alloc: SourceAllocator,
     pub role_count: RoleCount,
     pub energy: EnergyStatus,
-    pub keepouts: Vec<SearchGoal>,
 }
 
 #[derive(Debug, Default)]
@@ -82,14 +81,6 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
         .filter_map(|creep| from_value(creep.memory()).ok().map(|mem| (creep, mem)))
         .collect();
 
-    let mut keepouts = Vec::new();
-    for spawn in &spawns {
-        keepouts.push(SearchGoal::new(spawn.pos(), 7));
-    }
-    for source in &sources {
-        keepouts.push(SearchGoal::new(source.source.pos(), 1));
-    }
-
     let mut d = SharedData {
         spawns,
         room,
@@ -97,7 +88,6 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
         source_alloc,
         role_count,
         energy,
-        keepouts,
     };
 
     let mut transport = TransportAllocator::new();
@@ -177,7 +167,14 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
     }
 
     // Path find stage
-    path_finder.process_movements();
+    let mut idle_keepouts = Vec::new();
+    for spawn in &d.spawns {
+        idle_keepouts.push(SearchGoal::new(spawn.pos(), 5));
+    }
+    for source in &d.sources {
+        idle_keepouts.push(SearchGoal::new(source.source.pos(), 1));
+    }
+    path_finder.process_movements(idle_keepouts);
 
     process_spawning(&d);
 
