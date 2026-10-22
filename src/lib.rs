@@ -8,6 +8,7 @@ use log::info;
 use log::warn;
 
 mod cache;
+mod construction_alloc;
 mod container;
 mod logging;
 mod memory;

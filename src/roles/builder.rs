@@ -4,7 +4,6 @@ use screeps::ObjectId;
 use screeps::ResourceType;
 use screeps::action_error_codes::BuildErrorCode;
 use screeps::action_error_codes::WithdrawErrorCode;
-use screeps::find;
 use screeps::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -36,7 +35,7 @@ enum BuilderState {
 }
 
 impl RoleTrait for Builder {
-    fn register(&mut self, creep: &Creep, _d: &mut SharedData, transport: &mut TransportAllocator) {
+    fn register(&mut self, creep: &Creep, d: &mut SharedData, transport: &mut TransportAllocator) {
         if creep.store().get(ResourceType::Energy).unwrap_or(0) == 0 {
             self.state = BuilderState::Fetch;
         }
@@ -46,6 +45,8 @@ impl RoleTrait for Builder {
         if self.state == BuilderState::Fetch {
             self.task_handle = Some(transport.register_creep_import(creep, self.task));
         }
+
+        d.construction_alloc.register_builder(creep, self.target);
     }
 
     fn run(
@@ -62,15 +63,7 @@ impl RoleTrait for Builder {
             self.task = handle.resolve(transport);
         }
 
-        if self.target.is_none() {
-            let center = creep.pos();
-            self.target = d
-                .room
-                .find(find::MY_CONSTRUCTION_SITES, None)
-                .into_iter()
-                .min_by_key(|s| center.get_range_to(s.pos()))
-                .and_then(|site| site.try_id());
-        }
+        self.target = d.construction_alloc.delegate(creep);
 
         match (self.state, self.target, self.task) {
             (BuilderState::Build, Some(id), _) => {

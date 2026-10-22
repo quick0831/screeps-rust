@@ -16,6 +16,7 @@ use serde_wasm_bindgen::from_value;
 use serde_wasm_bindgen::to_value;
 use strum::IntoDiscriminant as _;
 
+use crate::construction_alloc::ConstructionAllocator;
 use crate::container::put_containers;
 use crate::metric::Metric;
 use crate::path_finder::PathFinder;
@@ -41,6 +42,7 @@ pub struct SharedData {
     pub room: Room,
     pub sources: Vec<SourceInfo>,
     pub source_alloc: SourceAllocator,
+    pub construction_alloc: ConstructionAllocator,
     pub role_count: RoleCount,
     pub energy: EnergyStatus,
 }
@@ -70,6 +72,8 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
         .map(|s| ananlyze_source(s, &room))
         .collect();
     let source_alloc = SourceAllocator::new(&sources);
+    let construction_sites = room.find(find::MY_CONSTRUCTION_SITES, None);
+    let construction_alloc = ConstructionAllocator::new(construction_sites);
     let role_count = RoleCount::default();
     let energy = EnergyStatus {
         available: room.energy_available(),
@@ -86,6 +90,7 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
         room,
         sources,
         source_alloc,
+        construction_alloc,
         role_count,
         energy,
     };
@@ -150,6 +155,7 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
 
     // Allocation stage
     let transport = transport.allocate();
+    d.construction_alloc.allocate();
 
     let mut path_finder = PathFinder::new(creep_mems.iter().map(|(creep, _)| creep));
 
