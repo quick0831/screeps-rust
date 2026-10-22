@@ -45,9 +45,30 @@ enum PathType {
     AwayMulti(Vec<SearchGoal>),
 }
 
+impl Eq for PathType {}
+
+impl PartialEq for PathType {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (PathType::Toward(p1, d1), PathType::Toward(p2, d2))
+            | (PathType::Away(p1, d1), PathType::Away(p2, d2)) => p1 == p2 && d1 == d2,
+            (PathType::TowardMulti(v), PathType::TowardMulti(u))
+            | (PathType::AwayMulti(v), PathType::AwayMulti(u)) => {
+                let mut v: Vec<&SearchGoal> = v.iter().collect();
+                let mut u: Vec<&SearchGoal> = u.iter().collect();
+                v.sort();
+                u.sort();
+                v == u
+            }
+            _ => false,
+        }
+    }
+}
+
 struct CachedPath {
     valid: u8,
     path: VecDeque<Position>,
+    target: PathType,
 }
 
 impl PathFinder {
@@ -226,22 +247,27 @@ impl PathFinder {
             let mut entry = match path_cache.entry(id) {
                 Entry::Occupied(mut entry) => {
                     let e = entry.get_mut();
-                    if e.valid == 0 {
-                        e.valid = CACHE_VALID_TICK;
-                        e.path = call_path_finder(target, pos);
+                    if e.valid == 0 || e.target != target {
+                        *e = CachedPath {
+                            valid: CACHE_VALID_TICK,
+                            path: call_path_finder(target.clone(), pos),
+                            target,
+                        };
                     } else {
                         e.valid -= 1;
                     }
                     entry
                 }
                 Entry::Vacant(entry) => {
-                    let valid = CACHE_VALID_TICK;
-                    let path = call_path_finder(target, pos);
-                    let value = CachedPath { valid, path };
+                    let value = CachedPath {
+                        valid: CACHE_VALID_TICK,
+                        path: call_path_finder(target.clone(), pos),
+                        target,
+                    };
                     entry.insert_entry(value)
                 }
             };
-            let CachedPath { valid, path } = entry.get_mut();
+            let CachedPath { valid, path, .. } = entry.get_mut();
 
             path.pop_front_if(|p| *p == pos);
             let Some(direction) = path.front().and_then(|p| pos.get_direction_to(*p)) else {
@@ -301,7 +327,7 @@ fn clone_result(input: &MultiRoomCostResult) -> MultiRoomCostResult {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SearchGoal {
     pos: Position,
     range: u32,
