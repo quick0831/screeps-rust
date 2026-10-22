@@ -14,7 +14,6 @@ use screeps::StructureType;
 use screeps::find;
 use screeps::game;
 use screeps::pathfinder::MultiRoomCostResult;
-use screeps::pathfinder::SearchGoal;
 use screeps::pathfinder::SearchOptions;
 use screeps::pathfinder::search;
 use screeps::pathfinder::search_many;
@@ -31,30 +30,19 @@ pub struct PathFinder {
     creeps: BTreeMap<ObjectId<Creep>, (WorkType, Position)>,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 enum WorkType {
     Idle,
     Working,
     Path(PathType),
 }
 
+#[derive(Debug, Clone)]
 enum PathType {
     Toward(Position, u32),
     Away(Position, u32),
     TowardMulti(Vec<SearchGoal>),
     AwayMulti(Vec<SearchGoal>),
-}
-
-impl Clone for PathType {
-    fn clone(&self) -> Self {
-        let c = |v: &Vec<SearchGoal>| v.iter().map(clone_search_goal).collect();
-        match self {
-            PathType::Toward(p, d) => PathType::Toward(*p, *d),
-            PathType::Away(p, d) => PathType::Away(*p, *d),
-            PathType::TowardMulti(v) => PathType::TowardMulti(c(v)),
-            PathType::AwayMulti(v) => PathType::AwayMulti(c(v)),
-        }
-    }
 }
 
 struct CachedPath {
@@ -107,11 +95,11 @@ impl PathFinder {
         let creep_pos = creep.pos();
         if goals
             .iter()
-            .any(|g| creep_pos.get_range_to(g.pos().pos()) <= g.range())
+            .any(|g| creep_pos.get_range_to(g.pos) <= g.range)
         {
             return;
         }
-        let goals = goals.iter().map(clone_search_goal).collect();
+        let goals = goals.to_owned();
         let id = creep.try_id();
         let Some(id) = id else { return };
         let r = self.creeps.get_mut(&id);
@@ -124,11 +112,11 @@ impl PathFinder {
         let creep_pos = creep.pos();
         if goals
             .iter()
-            .all(|g| creep_pos.get_range_to(g.pos().pos()) >= g.range())
+            .all(|g| creep_pos.get_range_to(g.pos) >= g.range)
         {
             return;
         }
-        let goals = goals.iter().map(clone_search_goal).collect();
+        let goals = goals.to_owned();
         let id = creep.try_id();
         let Some(id) = id else { return };
         let r = self.creeps.get_mut(&id);
@@ -213,14 +201,14 @@ impl PathFinder {
                 }
                 PathType::TowardMulti(goals) => {
                     let options = SearchOptions::new(&mut get_costmatrix).max_rooms(1);
-                    search_many(pos, goals.into_iter(), Some(options))
+                    search_many(pos, goals.into_iter().map(SearchGoal::into), Some(options))
                 }
                 PathType::AwayMulti(goals) => {
                     let options = SearchOptions::new(&mut get_costmatrix)
                         .flee(true)
                         .max_rooms(1)
                         .max_ops(100);
-                    search_many(pos, goals.into_iter(), Some(options))
+                    search_many(pos, goals.into_iter().map(SearchGoal::into), Some(options))
                 }
             };
             VecDeque::from(result.path())
@@ -313,6 +301,21 @@ fn clone_result(input: &MultiRoomCostResult) -> MultiRoomCostResult {
     }
 }
 
-fn clone_search_goal(input: &SearchGoal) -> SearchGoal {
-    unsafe { std::mem::transmute_copy(input) }
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SearchGoal {
+    pos: Position,
+    range: u32,
+}
+
+impl SearchGoal {
+    pub fn new(pos: Position, range: u32) -> Self {
+        Self { pos, range }
+    }
+}
+
+impl From<SearchGoal> for screeps::pathfinder::SearchGoal {
+    fn from(value: SearchGoal) -> Self {
+        let SearchGoal { pos, range } = value;
+        Self::new(pos, range)
+    }
 }
