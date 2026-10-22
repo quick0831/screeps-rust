@@ -93,7 +93,7 @@ impl RoleTrait for Builder {
             }
         }
 
-        if self.task.is_none() {
+        if self.target.is_none() && self.task.is_none() {
             path_finder.idle(creep);
         }
     }

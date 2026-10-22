@@ -77,7 +77,7 @@ impl RoleTrait for Upgrader {
             self.task = None;
         }
 
-        if self.task.is_none() {
+        if !self.upgrading && self.task.is_none() {
             path_finder.idle(creep);
         }
     }
