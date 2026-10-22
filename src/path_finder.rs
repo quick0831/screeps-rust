@@ -33,10 +33,10 @@ pub struct PathFinder {
 }
 
 enum PathType {
-    MoveTo(Position, u32),
-    MoveAway(Position, u32),
-    MoveToMulti(Vec<SearchGoal>),
-    MoveAwayMulti(Vec<SearchGoal>),
+    Toward(Position, u32),
+    Away(Position, u32),
+    TowardMulti(Vec<SearchGoal>),
+    AwayMulti(Vec<SearchGoal>),
 }
 
 struct CachedPath {
@@ -68,7 +68,7 @@ impl PathFinder {
         let Some(id) = id else { return };
         let r = self.creeps.get_mut(&id);
         let Some(r) = r else { return };
-        r.0 = Some(PathType::MoveTo(target_pos, range));
+        r.0 = Some(PathType::Toward(target_pos, range));
     }
 
     #[allow(unused)]
@@ -81,7 +81,7 @@ impl PathFinder {
         let Some(id) = id else { return };
         let r = self.creeps.get_mut(&id);
         let Some(r) = r else { return };
-        r.0 = Some(PathType::MoveAway(target_pos, range));
+        r.0 = Some(PathType::Away(target_pos, range));
     }
 
     #[allow(unused)]
@@ -98,7 +98,7 @@ impl PathFinder {
         let Some(id) = id else { return };
         let r = self.creeps.get_mut(&id);
         let Some(r) = r else { return };
-        r.0 = Some(PathType::MoveToMulti(goals));
+        r.0 = Some(PathType::TowardMulti(goals));
     }
 
     pub fn move_away_multi(&mut self, creep: &Creep, goals: &[SearchGoal]) {
@@ -114,7 +114,7 @@ impl PathFinder {
         let Some(id) = id else { return };
         let r = self.creeps.get_mut(&id);
         let Some(r) = r else { return };
-        r.0 = Some(PathType::MoveAwayMulti(goals));
+        r.0 = Some(PathType::AwayMulti(goals));
     }
 
     pub fn process_movements(mut self) {
@@ -173,22 +173,22 @@ impl PathFinder {
 
         let mut call_path_finder = |target, pos| {
             let result = match target {
-                PathType::MoveTo(target, range) => {
+                PathType::Toward(target, range) => {
                     let options = SearchOptions::new(&mut get_costmatrix).max_rooms(1);
                     search(pos, target, range, Some(options))
                 }
-                PathType::MoveAway(target, range) => {
+                PathType::Away(target, range) => {
                     let options = SearchOptions::new(&mut get_costmatrix)
                         .flee(true)
                         .max_rooms(1)
                         .max_ops(100);
                     search(pos, target, range, Some(options))
                 }
-                PathType::MoveToMulti(goals) => {
+                PathType::TowardMulti(goals) => {
                     let options = SearchOptions::new(&mut get_costmatrix).max_rooms(1);
                     search_many(pos, goals.into_iter(), Some(options))
                 }
-                PathType::MoveAwayMulti(goals) => {
+                PathType::AwayMulti(goals) => {
                     let options = SearchOptions::new(&mut get_costmatrix)
                         .flee(true)
                         .max_rooms(1)
