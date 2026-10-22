@@ -89,9 +89,12 @@ impl RoleTrait for Builder {
                 }
             }
             _ => {
-                path_finder.idle(creep);
                 self.task = None;
             }
+        }
+
+        if self.task.is_none() {
+            path_finder.idle(creep);
         }
     }
 }

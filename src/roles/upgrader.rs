@@ -74,8 +74,11 @@ impl RoleTrait for Upgrader {
             }
         } else {
             // No task available, enter idle state
-            path_finder.idle(creep);
             self.task = None;
+        }
+
+        if self.task.is_none() {
+            path_finder.idle(creep);
         }
     }
 }

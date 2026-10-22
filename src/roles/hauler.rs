@@ -78,8 +78,11 @@ impl RoleTrait for Hauler {
             }
             None => {
                 // No task available, enter idle state
-                path_finder.idle(creep);
             }
+        }
+
+        if self.task.is_none() {
+            path_finder.idle(creep);
         }
     }
 }
