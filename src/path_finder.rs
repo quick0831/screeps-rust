@@ -153,7 +153,7 @@ impl PathFinder {
         r.0 = WorkType::Idle;
     }
 
-    pub fn process_movements(self, _idle_keepouts: Vec<SearchGoal>) {
+    pub fn process_movements(self) {
         let working_creeps: Vec<_> = self
             .creeps
             .iter()

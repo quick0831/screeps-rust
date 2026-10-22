@@ -9,6 +9,7 @@ use screeps::TextAlign;
 use screeps::TextStyle;
 use screeps::find;
 use screeps::game;
+#[allow(unused)]
 use screeps::prelude::*;
 use serde::Deserialize;
 use serde::Serialize;
@@ -20,7 +21,6 @@ use crate::construction_alloc::ConstructionAllocator;
 use crate::container::put_containers;
 use crate::metric::Metric;
 use crate::path_finder::PathFinder;
-use crate::path_finder::SearchGoal;
 use crate::roles::*;
 use crate::source::ContainerInfo;
 use crate::source::SourceInfo;
@@ -173,14 +173,7 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
     }
 
     // Path find stage
-    let mut idle_keepouts = Vec::new();
-    for spawn in &d.spawns {
-        idle_keepouts.push(SearchGoal::new(spawn.pos(), 5));
-    }
-    for source in &d.sources {
-        idle_keepouts.push(SearchGoal::new(source.source.pos(), 1));
-    }
-    path_finder.process_movements(idle_keepouts);
+    path_finder.process_movements();
 
     process_spawning(&d);
 
