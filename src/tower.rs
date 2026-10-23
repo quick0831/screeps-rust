@@ -1,5 +1,3 @@
-use std::cmp::min;
-
 use screeps::ResourceType;
 use screeps::StructureObject;
 use screeps::StructureTower;
@@ -36,9 +34,9 @@ pub fn run(tower: StructureTower, transport: &mut TransportAllocator) {
                 // avoid fixing nearby walls (too hard to fill 300M hp)
                 false
             } else if let StructureObject::StructureRampart(s) = s {
-                s.hits() < min(25_000_000, (s.hits_max() as f32 * 0.9) as u32)
+                s.hits() < 30_000
             } else if let Some(repairable) = s.as_repairable() {
-                Fraction(repairable.hits(), repairable.hits_max()) < Fraction(9, 10)
+                Fraction(repairable.hits(), repairable.hits_max()) < Fraction(1, 5)
             } else {
                 false
             }
