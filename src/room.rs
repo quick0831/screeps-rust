@@ -73,7 +73,8 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
         .collect();
     let source_alloc = SourceAllocator::new(&sources);
     let construction_sites = room.find(find::MY_CONSTRUCTION_SITES, None);
-    let construction_alloc = ConstructionAllocator::new(construction_sites);
+    let my_structures = room.find(find::MY_STRUCTURES, None);
+    let construction_alloc = ConstructionAllocator::new(construction_sites, my_structures);
     let role_count = RoleCount::default();
     let energy = EnergyStatus {
         available: room.energy_available(),

@@ -1,6 +1,7 @@
 use screeps::Creep;
 use screeps::ResourceType;
 use screeps::action_error_codes::BuildErrorCode;
+use screeps::action_error_codes::CreepRepairErrorCode;
 use screeps::action_error_codes::WithdrawErrorCode;
 use screeps::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -69,6 +70,15 @@ impl RoleTrait for Builder {
                 ConstructionTask::Build(id) => {
                     if let Some(target) = id.resolve() {
                         if let Err(BuildErrorCode::NotInRange) = creep.build(&target) {
+                            path_finder.move_to(creep, target.pos(), 3);
+                        }
+                    } else {
+                        self.fetch_task = None;
+                    }
+                }
+                ConstructionTask::Repair(id) => {
+                    if let Some(target) = id.resolve() {
+                        if let Err(CreepRepairErrorCode::NotInRange) = creep.repair(&target) {
                             path_finder.move_to(creep, target.pos(), 3);
                         }
                     } else {

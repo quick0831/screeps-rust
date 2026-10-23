@@ -9,7 +9,6 @@ use screeps::SpawnOptions;
 use screeps::StructureSpawn;
 use screeps::TextAlign;
 use screeps::TextStyle;
-use screeps::find;
 use screeps::game;
 use screeps::prelude::*;
 use serde_wasm_bindgen::from_value;
@@ -22,7 +21,6 @@ use crate::source::ContainerInfo;
 
 pub fn process_spawning(d: &SharedData) {
     let time = game::time();
-    let has_construction_sites = !d.room.find(find::CONSTRUCTION_SITES, None).is_empty();
 
     let show_text = |spawn: &StructureSpawn, text: String| {
         let visual = d.room.visual();
@@ -87,8 +85,7 @@ pub fn process_spawning(d: &SharedData) {
             let mem = Harvester::new(target).into();
             spawn_creep(spawn, &body, &name, &mem);
             break;
-        } else if d.role_count.builders < 2 && has_construction_sites && d.role_count.upgraders != 0
-        {
+        } else if d.construction_alloc.get_creep_spawn_info(&d.role_count) {
             let body = vec![Part::Move, Part::Move, Part::Work, Part::Carry];
             let name = format!("Builder{time}");
             let mem = Builder::default().into();
