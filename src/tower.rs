@@ -34,7 +34,7 @@ pub fn run(tower: StructureTower, transport: &mut TransportAllocator) {
                 // avoid fixing nearby walls (too hard to fill 300M hp)
                 false
             } else if let StructureObject::StructureRampart(s) = s {
-                s.hits() < 30_000
+                s.hits() < 1000
             } else if let Some(repairable) = s.as_repairable() {
                 Fraction(repairable.hits(), repairable.hits_max()) < Fraction(1, 5)
             } else {
