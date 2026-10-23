@@ -10,14 +10,14 @@ use crate::roles::RoleTrait;
 use crate::room::RoomMemory;
 use crate::room::SharedData;
 use crate::transport_alloc::BidirTaskHandle;
-use crate::transport_alloc::Task;
 use crate::transport_alloc::TransportAllocation;
 use crate::transport_alloc::TransportAllocator;
+use crate::transport_alloc::TransportTask;
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Hauler {
-    task: Option<Task>,
+    task: Option<TransportTask>,
     #[serde(skip)]
     task_handle: Option<BidirTaskHandle>,
 }
@@ -50,7 +50,7 @@ impl RoleTrait for Hauler {
         }
 
         match self.task {
-            Some(Task::Pickup(id)) => {
+            Some(TransportTask::Pickup(id)) => {
                 if let Some(target) = id.resolve() {
                     let err = creep.withdraw(&target, ResourceType::Energy, None);
                     if let Err(WithdrawErrorCode::NotInRange) = err {
@@ -63,7 +63,7 @@ impl RoleTrait for Hauler {
                     self.task = None;
                 }
             }
-            Some(Task::Supply(id)) => {
+            Some(TransportTask::Supply(id)) => {
                 if let Some(target) = id.resolve() {
                     let err = creep.transfer(&target, ResourceType::Energy, None);
                     if let Err(TransferErrorCode::NotInRange) = err {

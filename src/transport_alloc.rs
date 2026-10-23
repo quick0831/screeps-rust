@@ -29,7 +29,7 @@ pub struct TransportAllocator {
 }
 
 pub struct TransportAllocation {
-    alloc: Vec<Option<Task>>,
+    alloc: Vec<Option<TransportTask>>,
 }
 
 #[derive(Debug)]
@@ -46,7 +46,7 @@ enum TaskType {
 }
 
 struct Info {
-    task: Option<Task>,
+    task: Option<TransportTask>,
     size: u8,
     used_capacity: u32,
     free_capacity: u32,
@@ -86,7 +86,11 @@ impl TransportAllocator {
     }
 
     #[must_use = "Task handle dropped before used"]
-    pub fn register_hauler(&mut self, creep: &Creep, task: Option<Task>) -> BidirTaskHandle {
+    pub fn register_hauler(
+        &mut self,
+        creep: &Creep,
+        task: Option<TransportTask>,
+    ) -> BidirTaskHandle {
         let size = creep
             .body()
             .into_iter()
@@ -107,7 +111,11 @@ impl TransportAllocator {
     }
 
     #[must_use = "Task handle dropped before used"]
-    pub fn register_creep_import(&mut self, creep: &Creep, task: Option<Task>) -> ImportTaskHandle {
+    pub fn register_creep_import(
+        &mut self,
+        creep: &Creep,
+        task: Option<TransportTask>,
+    ) -> ImportTaskHandle {
         let size = creep
             .body()
             .into_iter()
@@ -128,7 +136,11 @@ impl TransportAllocator {
     }
 
     #[must_use = "Task handle dropped before used"]
-    pub fn register_creep_export(&mut self, creep: &Creep, task: Option<Task>) -> ExportTaskHandle {
+    pub fn register_creep_export(
+        &mut self,
+        creep: &Creep,
+        task: Option<TransportTask>,
+    ) -> ExportTaskHandle {
         let size = creep
             .body()
             .into_iter()
@@ -183,12 +195,12 @@ impl TransportAllocator {
         for info in &self.creeps {
             let Some(task) = info.task else { continue };
             match task {
-                Task::Pickup(id) => {
+                TransportTask::Pickup(id) => {
                     if let Some(export) = self.exports.iter_mut().find(|ex| ex.target.id() == id) {
                         export.amount = export.amount.saturating_sub(info.free_capacity);
                     }
                 }
-                Task::Supply(id) => {
+                TransportTask::Supply(id) => {
                     if let Some(import) = self.imports.iter_mut().find(|ex| ex.target.id() == id) {
                         import.amount = import.amount.saturating_sub(info.used_capacity);
                     }
@@ -309,7 +321,7 @@ impl TransportAllocator {
                     if import.amount > 0 {
                         self.imports.push(import);
                     }
-                    Task::Supply(id)
+                    TransportTask::Supply(id)
                 }
                 (_, Some((id, _))) => {
                     let mut export = self.exports.swap_remove(id);
@@ -320,7 +332,7 @@ impl TransportAllocator {
                     if export.amount > 0 {
                         self.exports.push(export);
                     }
-                    Task::Pickup(id)
+                    TransportTask::Pickup(id)
                 }
                 (None, None) => continue,
                 (Some(_), None) => unreachable(),
@@ -334,20 +346,20 @@ impl TransportAllocator {
 }
 
 impl BidirTaskHandle {
-    pub fn resolve(&self, transport: &TransportAllocation) -> Option<Task> {
+    pub fn resolve(&self, transport: &TransportAllocation) -> Option<TransportTask> {
         transport.alloc[self.0 as usize]
     }
 }
 
 impl ImportTaskHandle {
-    pub fn resolve(&self, transport: &TransportAllocation) -> Option<Task> {
+    pub fn resolve(&self, transport: &TransportAllocation) -> Option<TransportTask> {
         transport.alloc[self.0 as usize]
     }
 }
 
 impl ExportTaskHandle {
     #[allow(unused)]
-    pub fn resolve(&self, transport: &TransportAllocation) -> Option<Task> {
+    pub fn resolve(&self, transport: &TransportAllocation) -> Option<TransportTask> {
         transport.alloc[self.0 as usize]
     }
 }
@@ -374,7 +386,7 @@ pub enum Priority {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "task")]
-pub enum Task {
+pub enum TransportTask {
     Pickup(ResourceExportId),
     Supply(ResourceImportId),
 }

@@ -10,15 +10,15 @@ use crate::roles::RoleTrait;
 use crate::room::RoomMemory;
 use crate::room::SharedData;
 use crate::transport_alloc::ImportTaskHandle;
-use crate::transport_alloc::Task;
 use crate::transport_alloc::TransportAllocation;
 use crate::transport_alloc::TransportAllocator;
+use crate::transport_alloc::TransportTask;
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Upgrader {
     upgrading: bool,
-    task: Option<Task>,
+    task: Option<TransportTask>,
     #[serde(skip)]
     task_handle: Option<ImportTaskHandle>,
 }
@@ -60,7 +60,7 @@ impl RoleTrait for Upgrader {
             {
                 path_finder.move_to(creep, &controller, 3);
             }
-        } else if let Some(Task::Pickup(id)) = self.task {
+        } else if let Some(TransportTask::Pickup(id)) = self.task {
             if let Some(target) = id.resolve() {
                 let err = creep.withdraw(&target, ResourceType::Energy, None);
                 if let Err(WithdrawErrorCode::NotInRange) = err {

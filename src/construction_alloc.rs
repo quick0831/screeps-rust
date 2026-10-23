@@ -5,6 +5,8 @@ use screeps::Creep;
 use screeps::ObjectId;
 use screeps::Position;
 use screeps::prelude::*;
+use serde::Deserialize;
+use serde::Serialize;
 
 #[derive(Debug)]
 pub struct ConstructionAllocator {
@@ -15,13 +17,19 @@ pub struct ConstructionAllocator {
 #[derive(Debug)]
 struct Info {
     pos: Position,
-    target: Option<ObjectId<ConstructionSite>>,
+    target: Option<ConstructionTask>,
 }
 
 #[derive(Debug, Clone)]
 struct SiteBasicInfo {
     id: ObjectId<ConstructionSite>,
     pos: Position,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "task")]
+pub enum ConstructionTask {
+    Build(ObjectId<ConstructionSite>),
 }
 
 impl ConstructionAllocator {
@@ -38,7 +46,7 @@ impl ConstructionAllocator {
         ConstructionAllocator { creeps, sites }
     }
 
-    pub fn register_builder(&mut self, creep: &Creep, target: Option<ObjectId<ConstructionSite>>) {
+    pub fn register_builder(&mut self, creep: &Creep, target: Option<ConstructionTask>) {
         let Some(id) = creep.try_id() else { return };
         let pos = creep.pos();
         let info = Info { pos, target };
@@ -51,11 +59,11 @@ impl ConstructionAllocator {
                 .sites
                 .iter()
                 .min_by_key(|site| info.pos.get_range_to(site.pos))
-                .map(|site| site.id);
+                .map(|site| ConstructionTask::Build(site.id));
         }
     }
 
-    pub fn delegate(&self, creep: &Creep) -> Option<ObjectId<ConstructionSite>> {
+    pub fn delegate(&self, creep: &Creep) -> Option<ConstructionTask> {
         let id = creep.try_id()?;
         self.creeps.get(&id).and_then(|info| info.target)
     }
