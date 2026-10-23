@@ -41,7 +41,7 @@ struct RepairBasicInfo {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case", tag = "task")]
+#[serde(rename_all = "snake_case", tag = "task", content = "id")]
 pub enum ConstructionTask {
     Build(ObjectId<ConstructionSite>),
     Repair(RepairableObjectId),
