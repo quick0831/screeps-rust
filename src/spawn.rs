@@ -54,6 +54,11 @@ pub fn process_spawning(d: &SharedData) {
 
     let cold_start = d.role_count.harvesters == 0 || d.role_count.haulers == 0;
 
+    let harvester_unit_part = [Part::Move, Part::Work, Part::Carry];
+    let harvester_unit_cost: u32 = harvester_unit_part.map(Part::cost).into_iter().sum();
+    let harvester_spawn_cap = (d.energy.capacity / harvester_unit_cost) as u8;
+    let harvester_spawn_cap = if cold_start { 1 } else { harvester_spawn_cap };
+
     for spawn in &d.spawns {
         if let Some(spawning) = spawn.spawning() {
             if let Some(name) = spawning.name().as_string()
@@ -74,13 +79,10 @@ pub fn process_spawning(d: &SharedData) {
             let mem = Hauler::default().into();
             spawn_creep(spawn, &body, &name, &mem);
             break;
-        } else if let Some((target, spawn_size)) = d.source_alloc.get_creep_spawn_info() {
-            let unit_part = [Part::Move, Part::Work, Part::Carry];
-            let unit_cost: u32 = unit_part.map(Part::cost).into_iter().sum();
-            let spawn_cap = (max(300, d.energy.capacity - 300) / unit_cost) as u8;
-            let spawn_cap = if cold_start { 1 } else { spawn_cap };
-            let spawn_size = min(spawn_size, spawn_cap) as usize;
-            let body = unit_part.repeat(spawn_size);
+        } else if let Some((target, spawn_size)) =
+            d.source_alloc.get_creep_spawn_info(harvester_spawn_cap)
+        {
+            let body = harvester_unit_part.repeat(spawn_size as usize);
             let name = format!("Harvester{time}");
             let mem = Harvester::new(target).into();
             spawn_creep(spawn, &body, &name, &mem);
