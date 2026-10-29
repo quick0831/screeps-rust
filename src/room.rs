@@ -2,6 +2,7 @@ use screeps::Creep;
 use screeps::ResourceType;
 use screeps::Room;
 use screeps::StructureExtension;
+use screeps::StructureObject;
 use screeps::StructureSpawn;
 use screeps::StructureStorage;
 use screeps::StructureTower;
@@ -102,11 +103,14 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
 
     let my_structures = d.room.find(find::MY_STRUCTURES, None);
 
-    my_structures
+    let towers: Vec<StructureTower> = my_structures
         .iter()
-        .cloned()
-        .filter_map(|s| -> Option<StructureTower> { s.try_into().ok() })
-        .for_each(|tower| tower::run(tower, &mut transport));
+        .filter_map(|s| match s {
+            StructureObject::StructureTower(tower) => Some(tower.clone()),
+            _ => None,
+        })
+        .collect();
+    tower::run(&towers, &d.room, &mut transport);
 
     for (_, memory) in &creep_mems {
         match memory.discriminant() {
