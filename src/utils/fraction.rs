@@ -5,7 +5,10 @@ pub struct Fraction(pub u32, pub u32);
 
 impl Ord for Fraction {
     fn cmp(&self, other: &Self) -> Ordering {
-        Ord::cmp(&(self.0 * other.1), &(other.0 * self.1))
+        Ord::cmp(
+            &(self.0 as u64 * other.1 as u64),
+            &(other.0 as u64 * self.1 as u64),
+        )
     }
 }
 
