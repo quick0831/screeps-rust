@@ -10,14 +10,17 @@ use screeps::TextAlign;
 use screeps::TextStyle;
 use screeps::game;
 use screeps::prelude::*;
-use strum::IntoDiscriminant as _;
 
-use crate::ShardMemory;
 use crate::creeps::*;
 use crate::room::SharedData;
 use crate::source::ContainerInfo;
 
-pub fn process_spawning(d: &SharedData, memory: &mut ShardMemory) {
+pub struct NewCreepInfo {
+    pub name: String,
+    pub mem: CreepMemory,
+}
+
+pub fn process_spawning(d: &SharedData) -> Vec<NewCreepInfo> {
     let time = game::time();
 
     let show_text = |spawn: &StructureSpawn, text: String| {
@@ -50,11 +53,8 @@ pub fn process_spawning(d: &SharedData, memory: &mut ShardMemory) {
         let cost;
 
         if let Some(spawning) = spawn.spawning() {
-            if let Some(name) = spawning.name().as_string()
-                && let Some(mem) = memory.creeps.get(&name)
-            {
-                let role = mem.discriminant();
-                show_text(spawn, format!("🛠️ {role}"));
+            if let Some(name) = spawning.name().as_string() {
+                show_text(spawn, format!("🛠️ {name}"));
             }
             continue;
         } else if container_energy > 300 && d.role_count.haulers < 5 {
@@ -97,7 +97,7 @@ pub fn process_spawning(d: &SharedData, memory: &mut ShardMemory) {
                 error!("Spawning error: {err}");
             } else {
                 info!("Spawning: {name}");
-                memory.creeps.insert(name, mem);
+                return vec![NewCreepInfo { name, mem }];
             }
         } else {
             show_text(spawn, format!("Need {}/{}", d.energy.available, cost));
@@ -105,4 +105,5 @@ pub fn process_spawning(d: &SharedData, memory: &mut ShardMemory) {
 
         break;
     }
+    Vec::new()
 }

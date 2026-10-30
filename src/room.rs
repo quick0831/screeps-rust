@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use screeps::Creep;
 use screeps::ResourceType;
 use screeps::Room;
@@ -11,7 +9,6 @@ use screeps::StructureTower;
 use screeps::TextAlign;
 use screeps::TextStyle;
 use screeps::find;
-use screeps::game;
 #[allow(unused)]
 use screeps::prelude::*;
 use serde::Deserialize;
@@ -23,11 +20,11 @@ use crate::container::put_containers;
 use crate::creeps::*;
 use crate::metric::Metric;
 use crate::path_finder::PathFinder;
-use crate::shard::ShardMemory;
 use crate::source::ContainerInfo;
 use crate::source::SourceInfo;
 use crate::source::ananlyze_source;
 use crate::source_alloc::SourceAllocator;
+use crate::spawn::NewCreepInfo;
 use crate::spawn::process_spawning;
 use crate::tower;
 use crate::transport_alloc::Priority;
@@ -63,10 +60,15 @@ pub struct EnergyStatus {
     pub capacity: u32,
 }
 
-pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32, memory: &mut ShardMemory) {
-    let room_memory: &mut RoomMemory = memory.room.entry(room.name()).or_default();
+pub fn process_room(
+    room: Room,
+    room_memory: &mut RoomMemory,
+    spawns: Vec<StructureSpawn>,
+    creep_mems: &mut [(Creep, &mut CreepMemory)],
+    time: u32,
+) -> Vec<NewCreepInfo> {
     if spawns.is_empty() {
-        return;
+        return Vec::new();
     }
     let sources: Vec<_> = room
         .find(find::SOURCES, None)
@@ -88,16 +90,6 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32, memory: 
         available: room.energy_available(),
         capacity: room.energy_capacity_available(),
     };
-
-    let creep_refs: HashMap<String, Creep> = game::creeps().entries().collect();
-    let mut creep_mems: Vec<(Creep, &mut CreepMemory)> = memory
-        .creeps
-        .iter_mut()
-        .filter_map(|(name, mem)| {
-            let creep = creep_refs.get(name)?.clone();
-            Some((creep, mem))
-        })
-        .collect();
 
     let mut d = SharedData {
         spawns,
@@ -122,7 +114,7 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32, memory: 
         .collect();
     tower::run(&towers, &d.room, &mut transport);
 
-    for (_, memory) in &creep_mems {
+    for (_, memory) in creep_mems.iter_mut() {
         match memory.discriminant() {
             CreepRole::Hauler => d.role_count.haulers += 1,
             CreepRole::Harvester => d.role_count.harvesters += 1,
@@ -132,7 +124,7 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32, memory: 
     }
 
     // Register stage
-    for (creep, memory) in &mut creep_mems {
+    for (creep, memory) in creep_mems.iter_mut() {
         memory.register(creep, &mut d, &mut transport);
     }
 
@@ -176,7 +168,7 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32, memory: 
 
     // Execute stage
     for (creep, memory) in creep_mems {
-        memory.run(&creep, &mut d, room_memory, &mut path_finder, &transport);
+        memory.run(creep, &mut d, room_memory, &mut path_finder, &transport);
     }
 
     // Path find stage
@@ -185,7 +177,7 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32, memory: 
     room_memory.energy_rate.record_finish();
     let stat_energy_rate = room_memory.energy_rate.calculate_output();
 
-    process_spawning(&d, memory);
+    let new_creep = process_spawning(&d);
 
     let controller = d.room.controller().unwrap();
     let rcl = controller.level();
@@ -209,4 +201,6 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32, memory: 
     for (idx, text) in texts.into_iter().enumerate() {
         visual.text(0., (idx + 1) as f32, text, Some(style.clone()));
     }
+
+    new_creep
 }
