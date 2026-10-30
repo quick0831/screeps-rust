@@ -1,4 +1,3 @@
-use std::cmp::min;
 use std::collections::BTreeMap;
 
 use enum_dispatch::enum_dispatch;
@@ -9,11 +8,13 @@ use screeps::Position;
 use screeps::Structure;
 use screeps::StructureObject;
 use screeps::StructureRampart;
+use screeps::StructureRoad;
 use screeps::prelude::*;
 use serde::Deserialize;
 use serde::Serialize;
 
 use crate::room::RoleCount;
+use crate::utils::Fraction;
 
 #[derive(Debug)]
 pub struct ConstructionAllocator {
@@ -38,6 +39,7 @@ struct SiteBasicInfo {
 struct RepairBasicInfo {
     id: RepairableObjectId,
     pos: Position,
+    hit_ratio: Fraction,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -64,14 +66,23 @@ impl ConstructionAllocator {
         let repairables = repairables
             .into_iter()
             .filter_map(|s| s.try_into().ok())
-            .filter(|s| match s {
-                RepairableObject::Rampart(rampart) => {
-                    rampart.hits() < min(25_000_000, rampart.hits_max())
+            .filter_map(|s| match s {
+                RepairableObject::Rampart(ref rampart) => {
+                    // Repairs up to 25_000_000 hits
+                    let hit_ratio = Fraction(rampart.hits(), 50_000);
+                    let need_fix = hit_ratio < Fraction(500, 1);
+                    if need_fix { Some((s, hit_ratio)) } else { None }
+                }
+                _ => {
+                    let hit_ratio = Fraction(s.hits(), s.hits_max());
+                    let need_fix = hit_ratio < Fraction(9, 10);
+                    if need_fix { Some((s, hit_ratio)) } else { None }
                 }
             })
-            .map(|s: RepairableObject| RepairBasicInfo {
+            .map(|(s, hit_ratio)| RepairBasicInfo {
                 id: s.id(),
                 pos: s.pos(),
+                hit_ratio,
             })
             .collect();
         ConstructionAllocator {
@@ -89,23 +100,36 @@ impl ConstructionAllocator {
     }
 
     pub fn allocate(&mut self) {
+        let build_iter = self
+            .sites
+            .iter()
+            .map(|s| (ConstructionTask::Build(s.id), s.pos, None));
+        let repair_iter = self
+            .repairables
+            .iter()
+            .map(|s| (ConstructionTask::Repair(s.id), s.pos, Some(s.hit_ratio)));
+        let targets: Vec<_> = build_iter.chain(repair_iter).collect();
+
         for info in self.creeps.values_mut() {
-            let build_iter = self
-                .sites
+            if let Some(old_task) = info.target
+                && targets
+                    .iter()
+                    .find(|(task, _, _)| *task == old_task)
+                    .is_some()
+            {
+                // retain old task
+                continue;
+            }
+
+            info.target = targets
                 .iter()
-                .map(|s| (ConstructionTask::Build(s.id), s.pos));
-            let repair_iter = self
-                .repairables
-                .iter()
-                .map(|s| (ConstructionTask::Repair(s.id), s.pos));
-            info.target = build_iter
-                .chain(repair_iter)
-                .min_by_key(|(task, pos)| {
+                .cloned()
+                .min_by_key(|(task, pos, hit_ratio)| {
                     let is_repair = matches!(task, ConstructionTask::Repair(_));
                     let distance = info.pos.get_range_to(*pos);
-                    (is_repair, distance)
+                    (is_repair, *hit_ratio, distance)
                 })
-                .map(|(task, _)| task);
+                .map(|(task, _, _)| task);
         }
     }
 
@@ -129,18 +153,21 @@ trait RepairableObjectTrait {}
 #[enum_dispatch]
 pub enum RepairableObject {
     Rampart(StructureRampart),
+    Road(StructureRoad),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "type", content = "id")]
 pub enum RepairableObjectId {
     Rampart(ObjectId<StructureRampart>),
+    Road(ObjectId<StructureRoad>),
 }
 
 impl RepairableObject {
     fn id(&self) -> RepairableObjectId {
         match self {
             Self::Rampart(rampart) => RepairableObjectId::Rampart(rampart.id()),
+            Self::Road(road) => RepairableObjectId::Road(road.id()),
         }
     }
 }
@@ -149,6 +176,7 @@ impl RepairableObjectId {
     pub fn resolve(&self) -> Option<RepairableObject> {
         Some(match self {
             Self::Rampart(id) => RepairableObject::Rampart(id.resolve()?),
+            Self::Road(id) => RepairableObject::Road(id.resolve()?),
         })
     }
 }
@@ -159,6 +187,7 @@ impl HasPosition for RepairableObject {
     fn pos(&self) -> Position {
         match self {
             Self::Rampart(rampart) => rampart.pos(),
+            Self::Road(road) => road.pos(),
         }
     }
 }
@@ -167,6 +196,7 @@ impl AsRef<Structure> for RepairableObject {
     fn as_ref(&self) -> &Structure {
         match self {
             Self::Rampart(rampart) => rampart.as_ref(),
+            Self::Road(road) => road.as_ref(),
         }
     }
 }
@@ -177,6 +207,7 @@ impl TryFrom<StructureObject> for RepairableObject {
     fn try_from(value: StructureObject) -> Result<Self, Self::Error> {
         match value {
             StructureObject::StructureRampart(rampart) => Ok(Self::Rampart(rampart)),
+            StructureObject::StructureRoad(road) => Ok(Self::Road(road)),
             _ => Err(()),
         }
     }

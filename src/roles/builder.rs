@@ -44,6 +44,8 @@ impl RoleTrait for Builder {
         }
         if self.state == BuilderState::Fetch {
             self.task_handle = Some(transport.register_creep_import(creep, self.fetch_task));
+            // Refetch a work task
+            self.work_task = None;
         }
 
         d.construction_alloc.register_builder(creep, self.work_task);
@@ -86,7 +88,7 @@ impl RoleTrait for Builder {
                     }
                 }
             },
-            (BuilderState::Fetch, Some(_), Some(TransportTask::Pickup(id))) => {
+            (BuilderState::Fetch, _, Some(TransportTask::Pickup(id))) => {
                 if let Some(target) = id.resolve() {
                     let err = creep.withdraw(&target, ResourceType::Energy, None);
                     if let Err(WithdrawErrorCode::NotInRange) = err {
