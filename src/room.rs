@@ -75,7 +75,13 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
     let source_alloc = SourceAllocator::new(&sources);
     let construction_sites = room.find(find::MY_CONSTRUCTION_SITES, None);
     let my_structures = room.find(find::MY_STRUCTURES, None);
-    let construction_alloc = ConstructionAllocator::new(construction_sites, my_structures);
+    let structures = room.find(find::STRUCTURES, None);
+    let repairables = structures
+        .iter()
+        .cloned()
+        .flat_map(|s| s.try_into())
+        .collect();
+    let construction_alloc = ConstructionAllocator::new(construction_sites, repairables);
     let role_count = RoleCount::default();
     let energy = EnergyStatus {
         available: room.energy_available(),
@@ -100,8 +106,6 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
     let mut transport = TransportAllocator::new();
 
     put_containers(&d);
-
-    let my_structures = d.room.find(find::MY_STRUCTURES, None);
 
     let towers: Vec<StructureTower> = my_structures
         .iter()

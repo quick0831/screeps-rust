@@ -52,7 +52,7 @@ pub enum ConstructionTask {
 impl ConstructionAllocator {
     pub fn new(
         construction_sites: Vec<ConstructionSite>,
-        repairables: Vec<StructureObject>,
+        repairables: Vec<RepairableObject>,
     ) -> Self {
         let creeps = BTreeMap::new();
         let sites = construction_sites
@@ -65,7 +65,6 @@ impl ConstructionAllocator {
             .collect();
         let repairables = repairables
             .into_iter()
-            .filter_map(|s| s.try_into().ok())
             .filter_map(|s| match s {
                 RepairableObject::Rampart(ref rampart) => {
                     // Repairs up to 25_000_000 hits
@@ -103,11 +102,11 @@ impl ConstructionAllocator {
         let build_iter = self
             .sites
             .iter()
-            .map(|s| (ConstructionTask::Build(s.id), s.pos, None));
+            .map(|s| (ConstructionTask::Build(s.id), s.pos, Fraction(0, 1)));
         let repair_iter = self
             .repairables
             .iter()
-            .map(|s| (ConstructionTask::Repair(s.id), s.pos, Some(s.hit_ratio)));
+            .map(|s| (ConstructionTask::Repair(s.id), s.pos, s.hit_ratio));
         let targets: Vec<_> = build_iter.chain(repair_iter).collect();
 
         for info in self.creeps.values_mut() {
