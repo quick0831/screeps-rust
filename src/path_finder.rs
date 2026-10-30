@@ -20,7 +20,7 @@ use screeps::pathfinder::search;
 use screeps::pathfinder::search_many;
 use screeps::prelude::*;
 
-use crate::cache::Cache;
+use crate::memory::Cache;
 
 const COST_UNWALKABLE: u8 = 255;
 const CACHE_VALID_TICK: u8 = 20;
