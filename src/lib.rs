@@ -1,8 +1,8 @@
+use std::sync::Once;
+
 use screeps::game;
 use wasm_bindgen::prelude::*;
 
-#[cfg(feature = "mmo")]
-use log::info;
 use log::warn;
 
 use crate::memory::MemoryRoot;
@@ -24,15 +24,19 @@ mod tower;
 mod transport_alloc;
 mod utils;
 
-static INIT_LOGGING: std::sync::Once = std::sync::Once::new();
-
 #[wasm_bindgen(js_name = loop)]
 pub fn game_loop() {
-    INIT_LOGGING.call_once(|| {
-        // show all output of Info level, adjust as needed
-        logging::setup_logging(logging::Info);
-    });
+    static INIT: Once = Once::new();
+    INIT.call_once(init);
+    tick();
+}
 
+fn init() {
+    // show all output of Info level, adjust as needed
+    logging::setup_logging(logging::Info);
+}
+
+fn tick() {
     let time = game::time();
 
     let mut memory: MemoryRoot<ShardMemory> = MemoryRoot::get();
@@ -54,8 +58,8 @@ pub fn game_loop() {
     #[cfg(feature = "mmo")]
     if game::cpu::bucket() >= screeps::PIXEL_CPU_COST as i32 {
         match game::cpu::generate_pixel() {
-            Ok(()) => info!("Generated pixel!"),
-            Err(err) => warn!("Generate pixel failed: {err}"),
+            Ok(()) => log::info!("Generated pixel!"),
+            Err(err) => log::warn!("Generate pixel failed: {err}"),
         }
     }
 }
