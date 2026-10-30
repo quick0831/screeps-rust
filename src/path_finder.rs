@@ -10,6 +10,7 @@ use screeps::ObjectId;
 use screeps::PolyStyle;
 use screeps::Position;
 use screeps::RoomName;
+use screeps::RoomXY;
 use screeps::StructureType;
 use screeps::find;
 use screeps::game;
@@ -201,6 +202,12 @@ impl PathFinder {
                 .chain(construction_site_pos)
             {
                 cost_matrix.set(pos.xy(), COST_UNWALKABLE);
+            }
+            for i in 1..49 {
+                cost_matrix.set(unsafe { RoomXY::unchecked_new(i, 0) }, COST_UNWALKABLE);
+                cost_matrix.set(unsafe { RoomXY::unchecked_new(i, 49) }, COST_UNWALKABLE);
+                cost_matrix.set(unsafe { RoomXY::unchecked_new(0, i) }, COST_UNWALKABLE);
+                cost_matrix.set(unsafe { RoomXY::unchecked_new(49, i) }, COST_UNWALKABLE);
             }
             let result = MultiRoomCostResult::CostMatrix(cost_matrix.into());
             cache.insert(room_name, clone_result(&result));
