@@ -15,8 +15,8 @@ use crate::spawn::NewCreepInfo;
 
 #[derive(Default, Serialize, Deserialize)]
 pub struct ShardMemory {
-    pub room: HashMap<RoomName, RoomMemory>,
-    pub creeps: HashMap<String, CreepMemory>,
+    room: HashMap<RoomName, RoomMemory>,
+    creeps: HashMap<String, CreepMemory>,
 }
 
 impl ShardMemory {
