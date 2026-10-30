@@ -20,6 +20,7 @@ use crate::room::SharedData;
 use crate::source::ContainerInfo;
 use crate::transport_alloc::TransportAllocation;
 use crate::transport_alloc::TransportAllocator;
+use crate::utils::Fraction;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Harvester {
@@ -87,7 +88,7 @@ impl RoleTrait for Harvester {
                         return;
                     };
                     self.container = Some(container_id);
-                    if (container.hits() as f32 / container.hits_max() as f32) < 0.4 {
+                    if Fraction(container.hits(), container.hits_max()) < Fraction(1, 5) {
                         self.state = HarvesterState::Repair;
                     } else {
                         // Deposit (because it can happen on the same tick as harvest)

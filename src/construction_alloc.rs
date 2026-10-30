@@ -6,6 +6,7 @@ use screeps::Creep;
 use screeps::ObjectId;
 use screeps::Position;
 use screeps::Structure;
+use screeps::StructureContainer;
 use screeps::StructureObject;
 use screeps::StructureRampart;
 use screeps::StructureRoad;
@@ -153,6 +154,7 @@ trait RepairableObjectTrait {}
 pub enum RepairableObject {
     Rampart(StructureRampart),
     Road(StructureRoad),
+    Container(StructureContainer),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -160,6 +162,7 @@ pub enum RepairableObject {
 pub enum RepairableObjectId {
     Rampart(ObjectId<StructureRampart>),
     Road(ObjectId<StructureRoad>),
+    Container(ObjectId<StructureContainer>),
 }
 
 impl RepairableObject {
@@ -167,6 +170,7 @@ impl RepairableObject {
         match self {
             Self::Rampart(rampart) => RepairableObjectId::Rampart(rampart.id()),
             Self::Road(road) => RepairableObjectId::Road(road.id()),
+            Self::Container(container) => RepairableObjectId::Container(container.id()),
         }
     }
 }
@@ -176,6 +180,7 @@ impl RepairableObjectId {
         Some(match self {
             Self::Rampart(id) => RepairableObject::Rampart(id.resolve()?),
             Self::Road(id) => RepairableObject::Road(id.resolve()?),
+            Self::Container(id) => RepairableObject::Container(id.resolve()?),
         })
     }
 }
@@ -187,6 +192,7 @@ impl HasPosition for RepairableObject {
         match self {
             Self::Rampart(rampart) => rampart.pos(),
             Self::Road(road) => road.pos(),
+            Self::Container(container) => container.pos(),
         }
     }
 }
@@ -196,6 +202,7 @@ impl AsRef<Structure> for RepairableObject {
         match self {
             Self::Rampart(rampart) => rampart.as_ref(),
             Self::Road(road) => road.as_ref(),
+            Self::Container(container) => container.as_ref(),
         }
     }
 }
@@ -207,6 +214,7 @@ impl TryFrom<StructureObject> for RepairableObject {
         match value {
             StructureObject::StructureRampart(rampart) => Ok(Self::Rampart(rampart)),
             StructureObject::StructureRoad(road) => Ok(Self::Road(road)),
+            StructureObject::StructureContainer(container) => Ok(Self::Container(container)),
             _ => Err(()),
         }
     }
