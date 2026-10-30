@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use screeps::Creep;
 use screeps::ResourceType;
 use screeps::Room;
@@ -14,10 +16,9 @@ use screeps::game;
 use screeps::prelude::*;
 use serde::Deserialize;
 use serde::Serialize;
-use serde_wasm_bindgen::from_value;
-use serde_wasm_bindgen::to_value;
 use strum::IntoDiscriminant as _;
 
+use crate::ShardMemory;
 use crate::construction_alloc::ConstructionAllocator;
 use crate::container::put_containers;
 use crate::metric::Metric;
@@ -62,8 +63,8 @@ pub struct EnergyStatus {
     pub capacity: u32,
 }
 
-pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
-    let mut room_memory: RoomMemory = from_value(room.memory()).unwrap_or_default();
+pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32, memory: &mut ShardMemory) {
+    let room_memory: &mut RoomMemory = memory.room.entry(room.name()).or_default();
     if spawns.is_empty() {
         return;
     }
@@ -88,9 +89,14 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
         capacity: room.energy_capacity_available(),
     };
 
-    let mut creep_mems: Vec<(Creep, Role)> = game::creeps()
-        .values()
-        .filter_map(|creep| from_value(creep.memory()).ok().map(|mem| (creep, mem)))
+    let creep_refs: HashMap<String, Creep> = game::creeps().entries().collect();
+    let mut creep_mems: Vec<(Creep, &mut Role)> = memory
+        .creeps
+        .iter_mut()
+        .filter_map(|(name, mem)| {
+            let creep = creep_refs.get(name)?.clone();
+            Some((creep, mem))
+        })
         .collect();
 
     let mut d = SharedData {
@@ -169,28 +175,17 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32) {
     let mut path_finder = PathFinder::new(creep_mems.iter().map(|(creep, _)| creep));
 
     // Execute stage
-    for (creep, mut memory) in creep_mems {
-        memory.run(
-            &creep,
-            &mut d,
-            &mut room_memory,
-            &mut path_finder,
-            &transport,
-        );
-
-        creep.set_memory(&to_value(&memory).expect("Failed to serialize memory"));
+    for (creep, memory) in creep_mems {
+        memory.run(&creep, &mut d, room_memory, &mut path_finder, &transport);
     }
 
     // Path find stage
     path_finder.process_movements();
 
-    process_spawning(&d);
-
     room_memory.energy_rate.record_finish();
     let stat_energy_rate = room_memory.energy_rate.calculate_output();
 
-    d.room
-        .set_memory(&to_value(&room_memory).expect("Failed to serialize Room memory"));
+    process_spawning(&d, memory);
 
     let controller = d.room.controller().unwrap();
     let rcl = controller.level();

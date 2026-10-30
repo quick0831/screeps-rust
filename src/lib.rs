@@ -1,11 +1,20 @@
+use std::collections::HashMap;
+
+use screeps::RoomName;
 use screeps::StructureSpawn;
 use screeps::game;
 use screeps::prelude::*;
+use serde::Deserialize;
+use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
 #[cfg(feature = "mmo")]
 use log::info;
 use log::warn;
+
+use crate::memory::MemoryRoot;
+use crate::roles::Role;
+use crate::room::RoomMemory;
 
 mod construction_alloc;
 mod container;
@@ -24,6 +33,12 @@ mod utils;
 
 static INIT_LOGGING: std::sync::Once = std::sync::Once::new();
 
+#[derive(Default, Serialize, Deserialize)]
+pub struct ShardMemory {
+    room: HashMap<RoomName, RoomMemory>,
+    creeps: HashMap<String, Role>,
+}
+
 #[wasm_bindgen(js_name = loop)]
 pub fn game_loop() {
     INIT_LOGGING.call_once(|| {
@@ -33,9 +48,7 @@ pub fn game_loop() {
 
     let time = game::time();
 
-    if time.is_multiple_of(100) {
-        memory::cleanup_memory();
-    }
+    let mut memory: MemoryRoot<ShardMemory> = MemoryRoot::get();
 
     let spawns: Vec<StructureSpawn> = game::spawns().values().collect();
     for room in game::rooms().values() {
@@ -45,7 +58,13 @@ pub fn game_loop() {
             .cloned()
             .collect();
 
-        room::process_room(room, spawns, time);
+        room::process_room(room, spawns, time, memory.as_mut());
+    }
+
+    memory.store();
+
+    if time.is_multiple_of(100) {
+        memory::cleanup_memory();
     }
 
     let cpu_limit = game::cpu::limit();
