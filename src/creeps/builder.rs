@@ -7,8 +7,8 @@ use screeps::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::construction_alloc::ConstructionTask;
+use crate::creeps::RoleTrait;
 use crate::path_finder::PathFinder;
-use crate::roles::RoleTrait;
 use crate::room::RoomMemory;
 use crate::room::SharedData;
 use crate::transport_alloc::ImportTaskHandle;

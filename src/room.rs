@@ -20,9 +20,9 @@ use strum::IntoDiscriminant as _;
 
 use crate::construction_alloc::ConstructionAllocator;
 use crate::container::put_containers;
+use crate::creeps::*;
 use crate::metric::Metric;
 use crate::path_finder::PathFinder;
-use crate::roles::*;
 use crate::shard::ShardMemory;
 use crate::source::ContainerInfo;
 use crate::source::SourceInfo;
@@ -90,7 +90,7 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32, memory: 
     };
 
     let creep_refs: HashMap<String, Creep> = game::creeps().entries().collect();
-    let mut creep_mems: Vec<(Creep, &mut Role)> = memory
+    let mut creep_mems: Vec<(Creep, &mut CreepMemory)> = memory
         .creeps
         .iter_mut()
         .filter_map(|(name, mem)| {
@@ -124,10 +124,10 @@ pub fn process_room(room: Room, spawns: Vec<StructureSpawn>, time: u32, memory: 
 
     for (_, memory) in &creep_mems {
         match memory.discriminant() {
-            RoleType::Hauler => d.role_count.haulers += 1,
-            RoleType::Harvester => d.role_count.harvesters += 1,
-            RoleType::Upgrader => d.role_count.upgraders += 1,
-            RoleType::Builder => d.role_count.builders += 1,
+            CreepRole::Hauler => d.role_count.haulers += 1,
+            CreepRole::Harvester => d.role_count.harvesters += 1,
+            CreepRole::Upgrader => d.role_count.upgraders += 1,
+            CreepRole::Builder => d.role_count.builders += 1,
         }
     }
 

@@ -7,14 +7,14 @@ use screeps::prelude::*;
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::roles::Role;
+use crate::creeps::CreepMemory;
 use crate::room;
 use crate::room::RoomMemory;
 
 #[derive(Default, Serialize, Deserialize)]
 pub struct ShardMemory {
     pub room: HashMap<RoomName, RoomMemory>,
-    pub creeps: HashMap<String, Role>,
+    pub creeps: HashMap<String, CreepMemory>,
 }
 
 impl ShardMemory {

@@ -35,9 +35,9 @@ pub trait RoleTrait {
 #[enum_dispatch(RoleTrait)]
 #[derive(Debug, Serialize, Deserialize, EnumDiscriminants)]
 #[serde(rename_all = "snake_case", tag = "role")]
-#[strum_discriminants(name(RoleType))]
+#[strum_discriminants(name(CreepRole))]
 #[strum_discriminants(derive(strum::Display))]
-pub enum Role {
+pub enum CreepMemory {
     Hauler,
     Harvester,
     Upgrader,

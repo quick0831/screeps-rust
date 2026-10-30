@@ -5,8 +5,8 @@ use screeps::action_error_codes::WithdrawErrorCode;
 use screeps::prelude::*;
 use serde::{Deserialize, Serialize};
 
+use crate::creeps::RoleTrait;
 use crate::path_finder::PathFinder;
-use crate::roles::RoleTrait;
 use crate::room::RoomMemory;
 use crate::room::SharedData;
 use crate::transport_alloc::ImportTaskHandle;
