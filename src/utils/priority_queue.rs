@@ -58,17 +58,18 @@ impl<K: Ord, V> IntoIterator for PriorityQueue<K, V> {
     type IntoIter = PqIter<K, V>;
 
     fn into_iter(self) -> Self::IntoIter {
-        PqIter(self.heap.into_iter())
+        PqIter(self.heap)
     }
 }
 
-pub struct PqIter<K: Ord, V>(<BinaryHeap<KeyCmp<K, V>> as IntoIterator>::IntoIter);
+// Note: BinaryHeap::into_iter() returns data in arbitary order, so pop() is used instead
+pub struct PqIter<K: Ord, V>(BinaryHeap<KeyCmp<K, V>>);
 
 impl<K: Ord, V> Iterator for PqIter<K, V> {
     type Item = (K, V);
 
     fn next(&mut self) -> Option<Self::Item> {
-        let KeyCmp { key, value } = self.0.next()?;
+        let KeyCmp { key, value } = self.0.pop()?;
         Some((key, value))
     }
 }
