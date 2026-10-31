@@ -39,12 +39,14 @@ pub struct ImportTaskHandle(u16);
 #[derive(Debug)]
 pub struct ExportTaskHandle(u16);
 
+#[derive(Debug)]
 enum TaskType {
     Bidir,
     Import,
     Export,
 }
 
+#[derive(Debug)]
 struct Info {
     task: Option<TransportTask>,
     size: u8,
@@ -55,6 +57,7 @@ struct Info {
     task_type: TaskType,
 }
 
+#[derive(Debug)]
 struct ImportInfo {
     target: ResourceImport,
     priority: Priority,
@@ -62,6 +65,7 @@ struct ImportInfo {
     pos: Position,
 }
 
+#[derive(Debug)]
 struct ExportInfo {
     target: ResourceExport,
     priority: Priority,
@@ -216,6 +220,8 @@ impl TransportAllocator {
             .creeps
             .iter()
             .filter(|info| matches!(info.task_type, TaskType::Export))
+            // Remove corresponded amount already queued
+            .filter(|info| info.task.is_none())
             .map(|info| info.used_capacity)
             .sum();
         let creep_bidir: u32 = self
@@ -237,6 +243,8 @@ impl TransportAllocator {
             .creeps
             .iter()
             .filter(|info| matches!(info.task_type, TaskType::Import))
+            // Remove corresponded amount already queued
+            .filter(|info| info.task.is_none())
             .map(|info| info.free_capacity)
             .sum();
         let structure_import: u32 = self.imports.iter().map(|info| info.amount).sum();
@@ -400,6 +408,7 @@ trait ResourceExporter {}
 trait ResourceImporter {}
 
 // Contract: All variant must implement `Withdrawable`
+#[derive(Debug)]
 #[enum_dispatch]
 pub enum ResourceExport {
     Container(StructureContainer),
@@ -409,6 +418,7 @@ pub enum ResourceExport {
 }
 
 // Contract: All variant must implement `Transferable`
+#[derive(Debug)]
 #[enum_dispatch]
 pub enum ResourceImport {
     Spawn(StructureSpawn),
