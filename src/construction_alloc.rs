@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use enum_dispatch::enum_dispatch;
+use num::Rational32;
 use screeps::ConstructionSite;
 use screeps::Creep;
 use screeps::ObjectId;
@@ -15,7 +16,6 @@ use serde::Deserialize;
 use serde::Serialize;
 
 use crate::room::RoleCount;
-use crate::utils::Fraction;
 
 #[derive(Debug)]
 pub struct ConstructionAllocator {
@@ -40,7 +40,7 @@ struct SiteBasicInfo {
 struct RepairBasicInfo {
     id: RepairableObjectId,
     pos: Position,
-    hit_ratio: Fraction,
+    hit_ratio: Rational32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -69,13 +69,13 @@ impl ConstructionAllocator {
             .filter_map(|s| match s {
                 RepairableObject::Rampart(ref rampart) => {
                     // Repairs up to 25_000_000 hits
-                    let hit_ratio = Fraction(rampart.hits(), 50_000);
-                    let need_fix = hit_ratio < Fraction(500, 1);
+                    let hit_ratio = Rational32::new(rampart.hits() as i32, 50_000);
+                    let need_fix = hit_ratio < Rational32::new(500, 1);
                     if need_fix { Some((s, hit_ratio)) } else { None }
                 }
                 _ => {
-                    let hit_ratio = Fraction(s.hits(), s.hits_max());
-                    let need_fix = hit_ratio < Fraction(9, 10);
+                    let hit_ratio = Rational32::new(s.hits() as i32, s.hits_max() as i32);
+                    let need_fix = hit_ratio < Rational32::new(9, 10);
                     if need_fix { Some((s, hit_ratio)) } else { None }
                 }
             })
@@ -103,7 +103,7 @@ impl ConstructionAllocator {
         let build_iter = self
             .sites
             .iter()
-            .map(|s| (ConstructionTask::Build(s.id), s.pos, Fraction(0, 1)));
+            .map(|s| (ConstructionTask::Build(s.id), s.pos, Rational32::new(0, 1)));
         let repair_iter = self
             .repairables
             .iter()

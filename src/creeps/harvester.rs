@@ -1,3 +1,4 @@
+use num::Rational32;
 use screeps::ConstructionSite;
 use screeps::Creep;
 use screeps::HARVEST_POWER;
@@ -20,7 +21,6 @@ use crate::room::SharedData;
 use crate::source::ContainerInfo;
 use crate::transport_alloc::TransportAllocation;
 use crate::transport_alloc::TransportAllocator;
-use crate::utils::Fraction;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Harvester {
@@ -88,7 +88,9 @@ impl RoleTrait for Harvester {
                         return;
                     };
                     self.container = Some(container_id);
-                    if Fraction(container.hits(), container.hits_max()) < Fraction(1, 5) {
+                    if Rational32::new(container.hits() as i32, container.hits_max() as i32)
+                        < Rational32::new(1, 5)
+                    {
                         self.state = HarvesterState::Repair;
                     } else {
                         // Deposit (because it can happen on the same tick as harvest)

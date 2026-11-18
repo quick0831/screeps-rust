@@ -3,6 +3,7 @@ use std::cmp::max;
 use std::cmp::min;
 
 use enum_dispatch::enum_dispatch;
+use num::Rational32;
 use screeps::Creep;
 use screeps::ObjectId;
 use screeps::Part;
@@ -18,7 +19,6 @@ use screeps::StructureTower;
 use screeps::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::utils::Fraction;
 use crate::utils::PriorityQueue;
 
 pub struct TransportAllocator {
@@ -289,8 +289,9 @@ impl TransportAllocator {
                     .filter_map(|(idx, import)| {
                         let amount = min(import.amount, info.used_capacity);
                         if amount != 0 {
-                            let distance = import.pos.get_range_to(info.pos);
-                            Some((idx, (import.priority, Fraction(amount, distance))))
+                            let distance = max(1, import.pos.get_range_to(info.pos));
+                            let score = Rational32::new(amount as i32, distance as i32);
+                            Some((idx, (import.priority, score)))
                         } else {
                             None
                         }
@@ -308,8 +309,9 @@ impl TransportAllocator {
                     .filter_map(|(idx, export)| {
                         let amount = min(export.amount, info.free_capacity);
                         if amount != 0 {
-                            let distance = export.pos.get_range_to(info.pos);
-                            Some((idx, (export.priority, Fraction(amount, distance))))
+                            let distance = max(1, export.pos.get_range_to(info.pos));
+                            let score = Rational32::new(amount as i32, distance as i32);
+                            Some((idx, (export.priority, score)))
                         } else {
                             None
                         }

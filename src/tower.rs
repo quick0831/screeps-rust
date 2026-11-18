@@ -1,3 +1,4 @@
+use num::Rational32;
 use screeps::ResourceType;
 use screeps::Room;
 use screeps::StructureObject;
@@ -8,7 +9,6 @@ use screeps::prelude::*;
 
 use crate::transport_alloc::Priority;
 use crate::transport_alloc::TransportAllocator;
-use crate::utils::Fraction;
 
 const ENERGY_THRESHOLD: u32 = (TOWER_CAPACITY as f64 * 0.8) as u32;
 
@@ -23,12 +23,13 @@ pub fn run(towers: &[StructureTower], room: &Room, transport: &mut TransportAllo
                 // only repair a rampart up to 1000 hits
                 let hits = rampart.hits();
                 if hits < 1000 {
-                    return Some((s, Fraction(hits, 5000)));
+                    return Some((s, Rational32::new(hits as i32, 5000)));
                 }
             } else if let Some(repairable) = s.as_repairable() {
                 // fix anything below 1/5 of hits
-                let hit_ratio = Fraction(repairable.hits(), repairable.hits_max());
-                if hit_ratio < Fraction(1, 5) {
+                let hit_ratio =
+                    Rational32::new(repairable.hits() as i32, repairable.hits_max() as i32);
+                if hit_ratio < Rational32::new(1, 5) {
                     return Some((s, hit_ratio));
                 }
             }
