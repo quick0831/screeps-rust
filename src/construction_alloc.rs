@@ -6,6 +6,8 @@ use screeps::ConstructionSite;
 use screeps::Creep;
 use screeps::ObjectId;
 use screeps::Position;
+use screeps::REPAIR_POWER;
+use screeps::ResourceType;
 use screeps::Structure;
 use screeps::StructureContainer;
 use screeps::StructureObject;
@@ -19,14 +21,15 @@ use crate::room::RoleCount;
 
 #[derive(Debug)]
 pub struct ConstructionAllocator {
-    creeps: BTreeMap<ObjectId<Creep>, Info>,
+    creeps: BTreeMap<ObjectId<Creep>, CreepInfo>,
     sites: Vec<SiteBasicInfo>,
     repairables: Vec<RepairBasicInfo>,
 }
 
 #[derive(Debug)]
-struct Info {
+struct CreepInfo {
     pos: Position,
+    energy: u32,
     target: Option<ConstructionTask>,
 }
 
@@ -34,6 +37,7 @@ struct Info {
 struct SiteBasicInfo {
     id: ObjectId<ConstructionSite>,
     pos: Position,
+    request_energy: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -41,6 +45,7 @@ struct RepairBasicInfo {
     id: RepairableObjectId,
     pos: Position,
     hit_ratio: Rational32,
+    request_energy: u32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -48,6 +53,14 @@ struct RepairBasicInfo {
 pub enum ConstructionTask {
     Build(ObjectId<ConstructionSite>),
     Repair(RepairableObjectId),
+}
+
+#[derive(Debug, Clone)]
+struct TargetInfo {
+    task: ConstructionTask,
+    pos: Position,
+    hit_ratio: Rational32,
+    request_energy: u32,
 }
 
 impl ConstructionAllocator {
@@ -59,9 +72,11 @@ impl ConstructionAllocator {
         let sites = construction_sites
             .into_iter()
             .filter_map(|c| {
-                let id = c.try_id()?;
-                let pos = c.pos();
-                Some(SiteBasicInfo { id, pos })
+                Some(SiteBasicInfo {
+                    id: c.try_id()?,
+                    pos: c.pos(),
+                    request_energy: c.progress_total() - c.progress(),
+                })
             })
             .collect();
         let repairables = repairables
@@ -69,20 +84,36 @@ impl ConstructionAllocator {
             .filter_map(|s| match s {
                 RepairableObject::Rampart(ref rampart) => {
                     // Repairs up to 25_000_000 hits
-                    let hit_ratio = Rational32::new(rampart.hits() as i32, 50_000);
+                    let hits = rampart.hits();
+                    let hit_ratio = Rational32::new(hits as i32, 50_000);
                     let need_fix = hit_ratio < Rational32::new(500, 1);
-                    if need_fix { Some((s, hit_ratio)) } else { None }
+                    let request_energy = 25_000_000_u32.saturating_sub(hits).div_ceil(REPAIR_POWER);
+                    if need_fix {
+                        Some((s, hit_ratio, request_energy))
+                    } else {
+                        None
+                    }
                 }
                 _ => {
-                    let hit_ratio = Rational32::new(s.hits() as i32, s.hits_max() as i32);
-                    let need_fix = hit_ratio < Rational32::new(9, 10);
-                    if need_fix { Some((s, hit_ratio)) } else { None }
+                    let hits = s.hits();
+                    let hits_max = s.hits_max();
+                    let hit_ratio = Rational32::new(hits as i32, hits_max as i32);
+                    let target_ratio = Rational32::new(9, 10);
+                    let need_fix = hit_ratio < target_ratio;
+                    let target_hits = (target_ratio * hits_max as i32).ceil().to_integer() as u32;
+                    let request_energy = target_hits.saturating_sub(hits).div_ceil(REPAIR_POWER);
+                    if need_fix {
+                        Some((s, hit_ratio, request_energy))
+                    } else {
+                        None
+                    }
                 }
             })
-            .map(|(s, hit_ratio)| RepairBasicInfo {
+            .map(|(s, hit_ratio, request_energy)| RepairBasicInfo {
                 id: s.id(),
                 pos: s.pos(),
                 hit_ratio,
+                request_energy,
             })
             .collect();
         ConstructionAllocator {
@@ -94,28 +125,40 @@ impl ConstructionAllocator {
 
     pub fn register_builder(&mut self, creep: &Creep, target: Option<ConstructionTask>) {
         let Some(id) = creep.try_id() else { return };
-        let pos = creep.pos();
-        let info = Info { pos, target };
+        let info = CreepInfo {
+            pos: creep.pos(),
+            energy: creep.store().get(ResourceType::Energy).unwrap_or(0),
+            target,
+        };
         self.creeps.insert(id, info);
     }
 
     pub fn allocate(&mut self) {
-        let build_iter = self
-            .sites
-            .iter()
-            .map(|s| (ConstructionTask::Build(s.id), s.pos, Rational32::new(0, 1)));
-        let repair_iter = self
-            .repairables
-            .iter()
-            .map(|s| (ConstructionTask::Repair(s.id), s.pos, s.hit_ratio));
-        let targets: Vec<_> = build_iter.chain(repair_iter).collect();
+        let build_iter = self.sites.iter().map(|s| TargetInfo {
+            task: ConstructionTask::Build(s.id),
+            pos: s.pos,
+            hit_ratio: Rational32::new(0, 1),
+            request_energy: s.request_energy,
+        });
+        let repair_iter = self.repairables.iter().map(|s| TargetInfo {
+            task: ConstructionTask::Repair(s.id),
+            pos: s.pos,
+            hit_ratio: s.hit_ratio,
+            request_energy: s.request_energy,
+        });
+        let mut targets: Vec<_> = build_iter.chain(repair_iter).collect();
+
+        for info in self.creeps.values() {
+            if let Some(old_task) = info.target
+                && let Some(target) = targets.iter_mut().find(|target| target.task == old_task)
+            {
+                target.request_energy = target.request_energy.saturating_sub(info.energy);
+            }
+        }
 
         for info in self.creeps.values_mut() {
             if let Some(old_task) = info.target
-                && targets
-                    .iter()
-                    .find(|(task, _, _)| *task == old_task)
-                    .is_some()
+                && let Some(_) = targets.iter().find(|target| target.task == old_task)
             {
                 // retain old task
                 continue;
@@ -123,13 +166,14 @@ impl ConstructionAllocator {
 
             info.target = targets
                 .iter()
+                .filter(|target| target.request_energy > 0)
                 .cloned()
-                .min_by_key(|(task, pos, hit_ratio)| {
-                    let is_repair = matches!(task, ConstructionTask::Repair(_));
-                    let distance = info.pos.get_range_to(*pos);
-                    (is_repair, *hit_ratio, distance)
+                .min_by_key(|target| {
+                    let is_repair = matches!(target.task, ConstructionTask::Repair(_));
+                    let distance = info.pos.get_range_to(target.pos);
+                    (is_repair, target.hit_ratio, distance)
                 })
-                .map(|(task, _, _)| task);
+                .map(|target| target.task);
         }
     }
 
