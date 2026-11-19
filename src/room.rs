@@ -1,3 +1,4 @@
+use log::warn;
 use screeps::Creep;
 use screeps::ResourceType;
 use screeps::Room;
@@ -19,6 +20,7 @@ use crate::construction_alloc::ConstructionAllocator;
 use crate::container::put_containers;
 use crate::creeps::*;
 use crate::metric::Metric;
+use crate::mineral::MineralManager;
 use crate::path_finder::PathFinder;
 use crate::source::ContainerInfo;
 use crate::source::SourceInfo;
@@ -44,6 +46,7 @@ pub struct SharedData {
     pub construction_alloc: ConstructionAllocator,
     pub role_count: RoleCount,
     pub energy: EnergyStatus,
+    pub mineral_manager: MineralManager,
 }
 
 #[derive(Debug, Default)]
@@ -52,6 +55,7 @@ pub struct RoleCount {
     pub harvesters: usize,
     pub upgraders: usize,
     pub builders: usize,
+    pub mineral_miner: usize,
 }
 
 #[derive(Debug, Default)]
@@ -90,6 +94,12 @@ pub fn process_room(
         available: room.energy_available(),
         capacity: room.energy_capacity_available(),
     };
+    let mineral = room.find(find::MINERALS, None).pop();
+    let Some(mineral) = mineral else {
+        warn!("Mineral not found in room {}", room.name());
+        return Vec::new();
+    };
+    let mineral_manager = MineralManager::new(mineral, &room);
 
     let mut d = SharedData {
         spawns,
@@ -99,6 +109,7 @@ pub fn process_room(
         construction_alloc,
         role_count,
         energy,
+        mineral_manager,
     };
 
     let mut transport = TransportAllocator::new();
@@ -120,6 +131,7 @@ pub fn process_room(
             CreepRole::Harvester => d.role_count.harvesters += 1,
             CreepRole::Upgrader => d.role_count.upgraders += 1,
             CreepRole::Builder => d.role_count.builders += 1,
+            CreepRole::MineralMiner => d.role_count.mineral_miner += 1,
         }
     }
 
@@ -193,6 +205,7 @@ pub fn process_room(
         format!("Harvesters: {}", d.role_count.harvesters),
         format!("Upgraders: {}", d.role_count.upgraders),
         format!("Builders: {}", d.role_count.builders),
+        format!("MineralMiner: {}", d.role_count.mineral_miner),
         format!("Energy rate: {:.3}", stat_energy_rate),
     ];
 

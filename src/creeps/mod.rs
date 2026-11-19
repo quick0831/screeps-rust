@@ -12,11 +12,13 @@ use crate::transport_alloc::TransportAllocator;
 mod builder;
 mod harvester;
 mod hauler;
+mod mineral_miner;
 mod upgrader;
 
 pub use builder::Builder;
 pub use harvester::Harvester;
 pub use hauler::Hauler;
+pub use mineral_miner::MineralMiner;
 pub use upgrader::Upgrader;
 
 #[enum_dispatch]
@@ -42,4 +44,5 @@ pub enum CreepMemory {
     Harvester,
     Upgrader,
     Builder,
+    MineralMiner,
 }

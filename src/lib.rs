@@ -14,6 +14,7 @@ mod creeps;
 mod logging;
 mod memory;
 mod metric;
+mod mineral;
 mod path_finder;
 mod room;
 mod shard;

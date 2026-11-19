@@ -88,6 +88,15 @@ pub fn process_spawning(d: &SharedData) -> Vec<NewCreepInfo> {
             body = unit_part.repeat(spawn_size);
             name = format!("Upgrader{time}");
             mem = Upgrader::default().into();
+        } else if let Some(spawn_size) = d.mineral_manager.get_creep_spawn_info() {
+            let mut b = vec![Part::Work; spawn_size as usize];
+            b.push(Part::Move);
+            b.push(Part::Move);
+            b.push(Part::Carry);
+            body = b;
+            cost = body.iter().cloned().map(Part::cost).sum();
+            name = format!("MineralMiner{time}");
+            mem = MineralMiner::new().into();
         } else {
             break;
         }
