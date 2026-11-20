@@ -45,10 +45,6 @@ fn tick() {
     shard.process(time);
     memory.store();
 
-    if time.is_multiple_of(100) {
-        memory::cleanup_memory();
-    }
-
     let cpu_limit = game::cpu::limit();
     let cpu_usage = game::cpu::get_used();
 

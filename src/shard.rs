@@ -24,6 +24,7 @@ impl ShardMemory {
         let spawns: Vec<StructureSpawn> = game::spawns().values().collect();
 
         let creep_refs: HashMap<String, Creep> = game::creeps().entries().collect();
+        self.creeps.retain(|name, _| creep_refs.contains_key(name));
         let mut creep_mems: Vec<(Creep, &mut CreepMemory)> = self
             .creeps
             .iter_mut()
