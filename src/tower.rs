@@ -7,8 +7,8 @@ use screeps::TOWER_CAPACITY;
 use screeps::find;
 use screeps::prelude::*;
 
-use crate::transport_alloc::Priority;
-use crate::transport_alloc::TransportAllocator;
+use crate::transport::Priority;
+use crate::transport::TransportAllocator;
 
 const ENERGY_THRESHOLD: u32 = (TOWER_CAPACITY as f64 * 0.8) as u32;
 

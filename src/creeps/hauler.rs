@@ -9,10 +9,10 @@ use crate::creeps::RoleTrait;
 use crate::path_finder::PathFinder;
 use crate::room::RoomMemory;
 use crate::room::SharedData;
-use crate::transport_alloc::BidirTaskHandle;
-use crate::transport_alloc::TransportAllocation;
-use crate::transport_alloc::TransportAllocator;
-use crate::transport_alloc::TransportTask;
+use crate::transport::BidirTaskHandle;
+use crate::transport::TransportAllocation;
+use crate::transport::TransportAllocator;
+use crate::transport::TransportTask;
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(default)]

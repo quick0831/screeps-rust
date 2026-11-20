@@ -22,7 +22,7 @@ mod source;
 mod source_alloc;
 mod spawn;
 mod tower;
-mod transport_alloc;
+mod transport;
 mod utils;
 
 #[wasm_bindgen(js_name = loop)]

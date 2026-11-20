@@ -6,8 +6,8 @@ use strum::EnumDiscriminants;
 use crate::path_finder::PathFinder;
 use crate::room::RoomMemory;
 use crate::room::SharedData;
-use crate::transport_alloc::TransportAllocation;
-use crate::transport_alloc::TransportAllocator;
+use crate::transport::TransportAllocation;
+use crate::transport::TransportAllocator;
 
 mod builder;
 mod harvester;

@@ -29,8 +29,8 @@ use crate::source_alloc::SourceAllocator;
 use crate::spawn::NewCreepInfo;
 use crate::spawn::process_spawning;
 use crate::tower;
-use crate::transport_alloc::Priority;
-use crate::transport_alloc::TransportAllocator;
+use crate::transport::Priority;
+use crate::transport::TransportAllocator;
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
